@@ -267,6 +267,43 @@ def register_routes(app, config):
             flash(f'Order {order_id} not found or failed to load', 'error')
             return redirect(url_for('dashboard'))
 
+        # Enhance order with validation summary and GRN status (same logic as dashboard)
+        order_detail_data['has_grn'] = has_grn_document(order_detail_data)
+
+        # Get validation summary for this order
+        validation_summary = ai_validator.get_stored_validation_result(order_id)
+        if validation_summary:
+            # Parse stored JSON fields if they're strings
+            try:
+                summary_data = json.loads(validation_summary.get('summary', '{}')) if isinstance(validation_summary.get('summary'), str) else validation_summary.get('summary', {})
+                discrepancies_data = json.loads(validation_summary.get('discrepancies', '[]')) if isinstance(validation_summary.get('discrepancies'), str) else validation_summary.get('discrepancies', [])
+            except json.JSONDecodeError:
+                summary_data = {}
+                discrepancies_data = []
+
+            # Default has_document to True for backward compatibility with older records
+            has_document = validation_summary.get('has_document')
+            if has_document is None:
+                has_document = True  # Default for older records
+
+            order_detail_data['validation_summary'] = {
+                'has_validation': True,
+                'is_valid': validation_summary.get('is_valid', False),
+                'confidence_score': validation_summary.get('confidence_score', 0.0),
+                'discrepancies_count': len(discrepancies_data) if discrepancies_data else validation_summary.get('discrepancies_count', 0),
+                'summary': summary_data,
+                'discrepancies': discrepancies_data,
+                'validation_date': validation_summary.get('validation_date'),
+                'processing_time': validation_summary.get('processing_time', 0.0),
+                'has_document': has_document,
+                'gtins_verified': validation_summary.get('gtins_verified'),
+                'gtins_matched': validation_summary.get('gtins_matched')
+            }
+        else:
+            order_detail_data['validation_summary'] = {
+                'has_validation': False
+            }
+
         return render_template('order_detail.html',
                              order=order_detail_data,
                              order_id=order_id,

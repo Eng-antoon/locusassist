@@ -15,49 +15,162 @@
     {% endif %}
 {% endwith %}
 
+<!-- Modern Header Section -->
 <div class="row mb-4">
-    <div class="col-md-6">
-        <h2><i class="fas fa-tachometer-alt me-2"></i>Orders Dashboard</h2>
-        {% if orders_data.pagesFetched %}
-            <span class="badge bg-info ms-2">
-                <i class="fas fa-layers me-1"></i>{{ orders_data.pagesFetched }} pages fetched
-            </span>
-        {% endif %}
-    </div>
-    <div class="col-md-6 text-end">
-        <div class="mb-2">
-            <form method="GET" class="d-inline-flex">
-                <input type="date" name="date" value="{{ selected_date }}" class="form-control me-2">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-search me-1"></i>Filter
-                </button>
-            </form>
-        </div>
-        <div class="mb-2">
-            <div class="d-inline-flex">
-                <input type="text" id="orderSearch" placeholder="Search Order ID..." class="form-control me-2" style="width: 200px;">
-                <button type="button" class="btn btn-outline-secondary" onclick="clearSearch()">
-                    <i class="fas fa-times"></i>
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h1 class="text-gradient mb-2">
+                    <i class="fas fa-tachometer-alt me-3"></i>Orders Dashboard
+                </h1>
+                <p class="text-muted mb-0">Real-time logistics management and validation system</p>
+                {% if orders_data.pagesFetched %}
+                    <div class="mt-2">
+                        <span class="status-indicator info">
+                            <i class="fas fa-layers me-1"></i>{{ orders_data.pagesFetched }} pages fetched
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-end">
+                    <small class="text-muted d-block">Last Updated</small>
+                    <span class="fw-semibold" id="last-updated">--:--:--</span>
+                </div>
+                <button class="btn btn-primary btn-icon hover-lift" onclick="location.reload()">
+                    <i class="fas fa-sync-alt"></i>
+                    Refresh
                 </button>
             </div>
-            <select id="issueFilter" class="form-select ms-2" style="width: 200px;" onchange="filterByIssues()">
-                <option value="all">All Orders</option>
-                <option value="no-grn">No GRN Available</option>
-                <option value="no-validation">Not Validated</option>
-                <option value="valid">Valid Orders</option>
-                <option value="invalid">Invalid Orders</option>
-                <option value="no-document">No Document</option>
-                <option value="missing-items">Missing Items</option>
-                <option value="extra-items">Extra Items</option>
-                <option value="quantity-issues">Quantity Issues</option>
-                <option value="gtin-issues">GTIN Issues</option>
-            </select>
         </div>
-        {% if orders_data and orders_data.orders %}
-            <button class="btn btn-warning ms-2" id="validate-all-btn">
-                <i class="fas fa-tasks me-1"></i>Validate All Orders
-            </button>
-        {% endif %}
+    </div>
+</div>
+
+{% if orders_data and orders_data.orders %}
+<!-- Statistics Cards -->
+<div class="order-stats-grid mb-4">
+    <div class="stat-card hover-lift">
+        <div class="stat-icon">
+            <i class="fas fa-box"></i>
+        </div>
+        <div class="stat-value">{{ orders_data.orders|length }}</div>
+        <div class="stat-label">Total Orders</div>
+    </div>
+
+    <div class="stat-card hover-lift">
+        <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|selectattr('validation_summary.is_valid')|list|length }}</div>
+        <div class="stat-label">Validated Orders</div>
+    </div>
+
+    <div class="stat-card hover-lift">
+        <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|rejectattr('validation_summary.is_valid', 'equalto', true)|list|length }}</div>
+        <div class="stat-label">Issues Found</div>
+    </div>
+
+    <div class="stat-card hover-lift">
+        <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color);">
+            <i class="fas fa-file-slash"></i>
+        </div>
+        <div class="stat-value">{{ orders_data.orders|rejectattr('has_grn')|list|length }}</div>
+        <div class="stat-label">No GRN</div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Improved Horizontal Filters Panel -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="filters-panel horizontal-filters">
+            <div class="filters-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-filter me-2"></i>
+                    Filters & Actions
+                </h6>
+            </div>
+
+            <div class="filters-body horizontal-layout">
+                <!-- Date Filter -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-calendar-alt me-1"></i>
+                        Date
+                    </label>
+                    <form method="GET" class="filter-control">
+                        <div class="input-group input-group-sm">
+                            <input type="date" name="date" value="{{ selected_date }}" class="form-control">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Search -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-search me-1"></i>
+                        Search
+                    </label>
+                    <div class="filter-control">
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="orderSearch" placeholder="Search Order ID..." class="form-control">
+                            <button type="button" class="btn btn-outline-secondary" onclick="clearSearch()">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Filter -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-filter me-1"></i>
+                        Status
+                    </label>
+                    <div class="filter-control">
+                        <select id="issueFilter" class="form-select form-select-sm" onchange="filterByIssues()">
+                            <option value="all">All Orders</option>
+                            <option value="no-grn">No GRN Available</option>
+                            <option value="no-validation">Not Validated</option>
+                            <option value="valid">Valid Orders</option>
+                            <option value="invalid">Invalid Orders</option>
+                            <option value="no-document">No Document</option>
+                            <option value="missing-items">Missing Items</option>
+                            <option value="extra-items">Extra Items</option>
+                            <option value="quantity-issues">Quantity Issues</option>
+                            <option value="gtin-issues">GTIN Issues</option>
+                        </select>
+                    </div>
+                </div>
+
+                {% if orders_data and orders_data.orders %}
+                <!-- Actions -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-cogs me-1"></i>
+                        Actions
+                    </label>
+                    <div class="filter-control">
+                        <div class="btn-group-sm d-flex gap-1">
+                            <button class="btn btn-warning" id="validate-all-btn">
+                                <i class="fas fa-tasks me-1"></i>
+                                Validate All
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" onclick="location.reload()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 
@@ -71,102 +184,106 @@
         </div>
     </div>
 
-    <div class="row">
+    <!-- Orders Grid with Enhanced Layout -->
+    <div class="orders-grid">
         {% for order in orders_data.orders %}
-            <div class="col-lg-6 mb-4">
-                <div class="card order-card h-100 clickable-card" onclick="viewOrderDetail('{{ order.id if order.id else loop.index0 }}', '{{ selected_date }}')">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">
-                            <i class="fas fa-box me-1"></i>
-                            Order #{{ loop.index }}
-                            <span class="badge bg-primary ms-2">{{ order.id }}</span>
-                        </h6>
-                        <div>
-                            <span class="badge bg-success">{{ order.orderStatus }}</span>
-                            {% if not order.has_grn %}
-                                <span class="badge bg-secondary ms-1" title="No GRN document available for this order">
-                                    <i class="fas fa-file-slash me-1"></i>No GRN
-                                </span>
-                            {% endif %}
-                            {% if order.validation_summary %}
-                                {% if order.validation_summary.has_validation %}
-                                    {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
-                                        <span class="badge bg-warning ms-1" title="No document detected in GRN image">
-                                            <i class="fas fa-file-times me-1"></i>No Doc
-                                        </span>
-                                    {% elif order.validation_summary.is_valid %}
-                                        <span class="badge bg-success ms-1" title="GRN validation passed">
-                                            <i class="fas fa-check-circle me-1"></i>Valid
-                                        </span>
-                                    {% else %}
-                                        <span class="badge bg-danger ms-1" title="GRN validation failed">
-                                            <i class="fas fa-exclamation-triangle me-1"></i>Issues: {{ order.validation_summary.discrepancies_count }}
-                                        </span>
-                                        {% if order.validation_summary.summary.missing_items and order.validation_summary.summary.missing_items > 0 %}
-                                            <span class="badge bg-warning ms-1" title="Missing items detected">
-                                                <i class="fas fa-minus-circle me-1"></i>-{{ order.validation_summary.summary.missing_items }}
-                                            </span>
-                                        {% endif %}
-                                        {% if order.validation_summary.summary.extra_items and order.validation_summary.summary.extra_items > 0 %}
-                                            <span class="badge bg-info ms-1" title="Extra items detected">
-                                                <i class="fas fa-plus-circle me-1"></i>+{{ order.validation_summary.summary.extra_items }}
-                                            </span>
-                                        {% endif %}
-                                    {% endif %}
-                                {% else %}
-                                    <span class="badge bg-secondary ms-1" title="GRN not validated yet">
-                                        <i class="fas fa-question me-1"></i>Unvalidated
-                                    </span>
-                                {% endif %}
-                            {% endif %}
-                            <i class="fas fa-external-link-alt ms-2 text-light" title="Click to view details"></i>
+            <div class="order-card clickable-card hover-glow slide-in-left" onclick="viewOrderDetail('{{ order.id if order.id else loop.index0 }}', '{{ selected_date }}')" style="animation-delay: {{ (loop.index0 * 0.1)|round(1) }}s">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fas fa-box"></i>
+                            <div>
+                                <h6 class="mb-0">Order #{{ loop.index }}</h6>
+                                <small class="opacity-75">{{ order.id }}</small>
+                            </div>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <!-- Location Info -->
-                        {% if order.location %}
-                            <div class="mb-3">
-                                <h6><i class="fas fa-map-marker-alt me-1"></i>Delivery Location</h6>
-                                <p class="mb-1"><strong>{{ order.location.name }}</strong></p>
-                                <p class="text-muted small mb-2">{{ order.location.address.formattedAddress }}</p>
-                                <div class="d-flex text-small">
-                                    <span class="badge bg-light text-dark me-2">
-                                        <i class="fas fa-globe me-1"></i>{{ order.location.address.city or 'N/A' }}
-                                    </span>
-                                    <span class="badge bg-light text-dark">
-                                        <i class="fas fa-flag me-1"></i>{{ order.location.address.countryCode }}
-                                    </span>
-                                </div>
-                            </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <i class="fas fa-external-link-alt opacity-75" title="Click to view details"></i>
+                    </div>
+                </div>
+
+                <div class="card-body order-card-content">
+                    <!-- Status Badges -->
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <span class="status-indicator success">
+                            {{ order.orderStatus }}
+                        </span>
+
+                        {% if not order.has_grn %}
+                            <span class="status-indicator danger" title="No GRN document available for this order">
+                                <i class="fas fa-file-slash"></i>No GRN
+                            </span>
                         {% endif %}
 
-                        <!-- Tour Details -->
-                        {% if order.orderMetadata.tourDetail %}
-                            {% set tour = order.orderMetadata.tourDetail %}
-                            <div class="mb-3">
-                                <h6><i class="fas fa-truck me-1"></i>Delivery Info</h6>
-                                <div class="row">
-                                    <div class="col-6">
-                                        <small class="text-muted">Rider:</small><br>
-                                        <strong>{{ tour.riderName }}</strong>
-                                    </div>
-                                    <div class="col-6">
-                                        <small class="text-muted">Vehicle:</small><br>
-                                        <strong>{{ tour.vehicleRegistrationNumber }}</strong>
-                                    </div>
+                        {% if order.validation_summary %}
+                            {% if order.validation_summary.has_validation %}
+                                {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
+                                    <span class="status-indicator warning" title="No document detected in GRN image">
+                                        <i class="fas fa-file-times"></i>No Doc
+                                    </span>
+                                {% elif order.validation_summary.is_valid %}
+                                    <span class="status-indicator success" title="GRN validation passed">
+                                        <i class="fas fa-check-circle"></i>Valid
+                                    </span>
+                                {% else %}
+                                    <span class="status-indicator danger" title="GRN validation failed">
+                                        <i class="fas fa-exclamation-triangle"></i>{{ order.validation_summary.discrepancies_count }} Issues
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="status-indicator info" title="GRN not validated yet">
+                                    <i class="fas fa-question"></i>Unvalidated
+                                </span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <!-- Enhanced Location Info -->
+                    {% if order.location %}
+                        <div class="order-meta-section">
+                            <h6><i class="fas fa-map-marker-alt"></i>Delivery Location</h6>
+                            <div class="order-info-grid">
+                                <div class="order-info-item">
+                                    <span class="order-info-label">Location:</span>
+                                    <span class="order-info-value">{{ order.location.name }}</span>
+                                </div>
+                                <div class="order-info-item">
+                                    <span class="order-info-label">City:</span>
+                                    <span class="order-info-value">{{ order.location.address.city or 'N/A' }}</span>
                                 </div>
                             </div>
-                        {% endif %}
+                            <small class="text-muted d-block mt-2">{{ order.location.address.formattedAddress }}</small>
+                        </div>
+                    {% endif %}
 
-                        <!-- Line Items Summary -->
-                        {% if order.orderMetadata.lineItems %}
-                            <div class="mb-3">
-                                <h6><i class="fas fa-list me-1"></i>Items ({{ order.orderMetadata.lineItems|length }})</h6>
-                                <div class="line-items-summary">
+                    <!-- Enhanced Tour Details -->
+                    {% if order.orderMetadata.tourDetail %}
+                        {% set tour = order.orderMetadata.tourDetail %}
+                        <div class="order-meta-section">
+                            <h6><i class="fas fa-truck"></i>Delivery Info</h6>
+                            <div class="order-info-grid">
+                                <div class="order-info-item">
+                                    <span class="order-info-label">Rider:</span>
+                                    <span class="order-info-value">{{ tour.riderName }}</span>
+                                </div>
+                                <div class="order-info-item">
+                                    <span class="order-info-label">Vehicle:</span>
+                                    <span class="order-info-value">{{ tour.vehicleRegistrationNumber }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Enhanced Line Items Summary -->
+                    {% if order.orderMetadata.lineItems %}
+                        <div class="order-meta-section">
+                            <h6><i class="fas fa-list"></i>Items ({{ order.orderMetadata.lineItems|length }})</h6>
+                            <div class="items-preview">
+                                <div class="items-list">
                                     {% for item in order.orderMetadata.lineItems[:3] %}
-                                        <div class="d-flex justify-content-between align-items-center py-1">
-                                            <span class="small">{{ item.id }}</span>
-                                            <span class="badge bg-secondary">{{ item.transactionStatus.transactedQuantity }}x</span>
+                                        <div class="item-row">
+                                            <span class="item-name">{{ item.id }}</span>
+                                            <span class="item-quantity">{{ item.transactionStatus.transactedQuantity }}x</span>
                                         </div>
                                     {% endfor %}
                                     {% if order.orderMetadata.lineItems|length > 3 %}
@@ -176,120 +293,135 @@
                                     {% endif %}
                                 </div>
                             </div>
-                        {% endif %}
+                        </div>
+                    {% endif %}
 
-                        <!-- Validation Summary -->
-                        {% if order.validation_summary %}
-                            <div class="mb-3">
-                                <h6><i class="fas fa-clipboard-check me-1"></i>GRN Validation</h6>
-                                {% if order.validation_summary.has_validation %}
-                                    <div class="validation-summary-card p-2 border rounded">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            {% if order.validation_summary.is_valid %}
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-check-circle me-1"></i>Valid
-                                                </span>
-                                            {% else %}
-                                                <span class="badge bg-danger">
-                                                    <i class="fas fa-exclamation-triangle me-1"></i>Invalid
-                                                </span>
-                                            {% endif %}
-                                            <small class="text-muted">
-                                                {{ "%.0f"|format(order.validation_summary.confidence_score * 100) }}% confidence
-                                            </small>
-                                        </div>
-
-                                        {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
-                                            <div class="alert alert-warning alert-sm p-2 mb-2">
-                                                <i class="fas fa-file-times me-1"></i>No document detected in GRN image
+                    <!-- Enhanced Validation Summary -->
+                    {% if order.validation_summary %}
+                        <div class="order-meta-section">
+                            <h6><i class="fas fa-clipboard-check"></i>GRN Validation</h6>
+                            {% if order.validation_summary.has_validation %}
+                                <div class="validation-summary-card">
+                                    <div class="validation-progress">
+                                        {% if order.validation_summary.is_valid %}
+                                            <div class="status-indicator success">
+                                                <i class="fas fa-check-circle"></i>Valid
+                                            </div>
+                                        {% else %}
+                                            <div class="status-indicator danger">
+                                                <i class="fas fa-exclamation-triangle"></i>Invalid
                                             </div>
                                         {% endif %}
-
-                                        <div class="row small">
-                                            <div class="col-6">
-                                                <strong>Items:</strong> {{ order.validation_summary.summary.total_items_found or 'N/A' }}
-                                            </div>
-                                            <div class="col-6">
-                                                <strong>Issues:</strong> {{ order.validation_summary.discrepancies_count }}
-                                            </div>
+                                        <div class="validation-progress-bar">
+                                            <div class="validation-progress-fill" style="width: {{ (order.validation_summary.confidence_score * 100)|round }}%"></div>
                                         </div>
+                                        <span class="small text-muted">{{ "%.0f"|format(order.validation_summary.confidence_score * 100) }}%</span>
+                                    </div>
 
+                                    {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
+                                        <div class="alert alert-warning alert-sm mb-2">
+                                            <i class="fas fa-file-times"></i>No document detected in GRN image
+                                        </div>
+                                    {% endif %}
+
+                                    <div class="validation-metrics">
+                                        <div class="validation-metric">
+                                            <div class="validation-metric-value">{{ order.validation_summary.summary.total_items_found or 'N/A' }}</div>
+                                            <div class="validation-metric-label">Items</div>
+                                        </div>
+                                        <div class="validation-metric">
+                                            <div class="validation-metric-value">{{ order.validation_summary.discrepancies_count }}</div>
+                                            <div class="validation-metric-label">Issues</div>
+                                        </div>
                                         {% if order.validation_summary.gtins_verified %}
-                                            <div class="row small mt-1">
-                                                <div class="col-12">
-                                                    <strong>GTINs:</strong> {{ order.validation_summary.gtins_matched }}/{{ order.validation_summary.gtins_verified }} matched
-                                                </div>
+                                            <div class="validation-metric">
+                                                <div class="validation-metric-value">{{ order.validation_summary.gtins_matched }}/{{ order.validation_summary.gtins_verified }}</div>
+                                                <div class="validation-metric-label">GTINs</div>
                                             </div>
                                         {% endif %}
-
-                                        <div class="mt-2 small text-muted">
-                                            <i class="fas fa-clock me-1"></i>
-                                            Processed: {{ order.validation_summary.validation_date.split('T')[0] if order.validation_summary.validation_date else 'N/A' }}
-                                            ({{ "%.2f"|format(order.validation_summary.processing_time) }}s)
-                                        </div>
                                     </div>
-                                {% else %}
-                                    <div class="text-center py-2">
-                                        <span class="badge bg-secondary">
-                                            <i class="fas fa-question me-1"></i>Not Validated
-                                        </span>
-                                        <p class="small text-muted mt-1 mb-0">GRN not processed yet</p>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% endif %}
 
-                        <!-- Time Info -->
-                        {% if order.orderMetadata.homebaseCompleteOn %}
-                            <div class="mb-2">
-                                <small class="text-muted">
-                                    <i class="fas fa-clock me-1"></i>Completed:
-                                    {{ order.orderMetadata.homebaseCompleteOn.split('T')[0] }}
-                                    {{ order.orderMetadata.homebaseCompleteOn.split('T')[1].split('.')[0] }}
-                                </small>
-                            </div>
-                        {% endif %}
-                    </div>
-                    <div class="card-footer d-flex justify-content-between align-items-center">
-                        <button class="btn btn-sm btn-outline-primary"
+                                    <small class="text-muted d-block mt-2">
+                                        <i class="fas fa-clock"></i>
+                                        Processed {{ order.validation_summary.validation_date.split('T')[0] if order.validation_summary.validation_date else 'N/A' }}
+                                        ({{ "%.2f"|format(order.validation_summary.processing_time) }}s)
+                                    </small>
+                                </div>
+                            {% else %}
+                                <div class="text-center py-3">
+                                    <div class="status-indicator info mb-2">
+                                        <i class="fas fa-question"></i>Not Validated
+                                    </div>
+                                    <small class="text-muted">GRN not processed yet</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+
+                    <!-- Enhanced Time Info -->
+                    {% if order.orderMetadata.homebaseCompleteOn %}
+                        <div class="order-meta-section">
+                            <small class="text-muted d-flex align-items-center gap-2">
+                                <i class="fas fa-clock"></i>
+                                Completed: {{ order.orderMetadata.homebaseCompleteOn.split('T')[0] }}
+                                {{ order.orderMetadata.homebaseCompleteOn.split('T')[1].split('.')[0] }}
+                            </small>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Enhanced Card Footer -->
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <div class="action-buttons">
+                        <button class="btn btn-sm btn-outline-primary btn-icon hover-lift"
                                 data-bs-toggle="collapse"
                                 data-bs-target="#order-details-{{ loop.index }}"
                                 onclick="event.stopPropagation();">
-                            <i class="fas fa-eye me-1"></i>View Details
+                            <i class="fas fa-eye"></i>
+                            Details
                         </button>
-                        <div class="validation-section">
-                            {% if not order.has_grn %}
-                                <div class="text-center">
-                                    <small class="text-muted">
-                                        <i class="fas fa-info-circle me-1"></i>No GRN Available
-                                    </small>
-                                </div>
-                            {% elif order.validation_summary and order.validation_summary.has_validation %}
-                                <button class="btn btn-sm btn-warning reprocess-order-btn"
-                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
-                                        data-date="{{ selected_date }}"
-                                        title="Re-process GRN with AI"
-                                        onclick="event.stopPropagation();">
-                                    <i class="fas fa-redo me-1"></i>Re-process
-                                </button>
-                            {% else %}
-                                <button class="btn btn-sm btn-success validate-order-btn"
-                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
-                                        data-date="{{ selected_date }}"
-                                        onclick="event.stopPropagation();">
-                                    <i class="fas fa-check-circle me-1"></i>Validate GRN
-                                </button>
-                            {% endif %}
-                            <div class="validation-status mt-2" id="validation-status-{{ order.id if order.id else loop.index0 }}" style="display: none;">
-                                <!-- Validation results will be displayed here -->
-                            </div>
-                        </div>
                     </div>
 
-                    <!-- Collapsible Details -->
-                    <div class="collapse" id="order-details-{{ loop.index }}">
-                        <div class="card-body border-top">
-                            <h6>Complete Order Details</h6>
+                    <div class="action-buttons">
+                        {% if not order.has_grn %}
+                            <button class="btn btn-sm btn-secondary btn-icon" disabled>
+                                <i class="fas fa-file-times"></i>
+                                NO GRN Document To Process
+                            </button>
+                        {% elif order.validation_summary and order.validation_summary.has_validation %}
+                            <button class="btn btn-sm btn-warning btn-icon hover-lift reprocess-order-btn"
+                                    data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                    data-date="{{ selected_date }}"
+                                    title="Re-process GRN with AI"
+                                    onclick="event.stopPropagation();">
+                                <i class="fas fa-redo"></i>
+                                Re-process
+                            </button>
+                        {% else %}
+                            <button class="btn btn-sm btn-success btn-icon hover-lift validate-order-btn"
+                                    data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                    data-date="{{ selected_date }}"
+                                    title="Validate GRN with AI"
+                                    onclick="event.stopPropagation();">
+                                <i class="fas fa-check-circle"></i>
+                                Validate GRN
+                            </button>
+                        {% endif %}
+                    </div>
+
+                    <div class="validation-status mt-2" id="validation-status-{{ order.id if order.id else loop.index0 }}" style="display: none;">
+                        <!-- Validation results will be displayed here -->
+                    </div>
+                </div>
+
+                <!-- Enhanced Collapsible Details -->
+                <div class="collapse" id="order-details-{{ loop.index }}">
+                    <div class="border-top bg-light">
+                        <div class="p-3">
+                            <h6 class="text-gradient mb-3">
+                                <i class="fas fa-code"></i>
+                                Complete Order Data
+                            </h6>
                             <div class="order-details-container">
                                 <pre class="order-json">{{ order | tojson(indent=2) }}</pre>
                             </div>
@@ -300,14 +432,19 @@
         {% endfor %}
     </div>
 {% else %}
-    <div class="row">
-        <div class="col-12">
-            <div class="text-center py-5">
-                <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
-                <h4>No Orders Found</h4>
-                <p class="text-muted">No completed orders found for {{ selected_date }}. Try selecting a different date.</p>
-            </div>
+    <!-- Enhanced Empty State -->
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i class="fas fa-inbox"></i>
         </div>
+        <h3 class="empty-state-title">No Orders Found</h3>
+        <p class="empty-state-description">
+            No completed orders found for {{ selected_date }}. Try selecting a different date or check your filters.
+        </p>
+        <button class="btn btn-primary btn-icon hover-lift mt-3" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i>
+            Refresh Data
+        </button>
     </div>
 {% endif %}
 {% endblock %}
@@ -611,12 +748,13 @@ document.addEventListener('DOMContentLoaded', function() {
     setupOrderSearch();
 });
 
-// Auto-refresh every 30 seconds (disabled during validation)
-setInterval(function() {
-    if (!document.querySelector('.collapse.show') && !document.querySelector('button:disabled')) {
-        location.reload();
-    }
-}, 30000);
+// Auto-refresh disabled - users can manually refresh when needed
+// Uncomment the following lines if you want auto-refresh every 5 minutes:
+// setInterval(function() {
+//     if (!document.querySelector('.collapse.show') && !document.querySelector('button:disabled')) {
+//         location.reload();
+//     }
+// }, 300000); // 5 minutes instead of 30 seconds
 
 // Order ID search functionality
 function setupOrderSearch() {

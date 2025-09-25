@@ -1,10 +1,15 @@
-// Locus Assistant JavaScript
+// Enhanced Locus Assistant - Modern JavaScript
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips
+    // Initialize Bootstrap components
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
+
+    // Initialize modern features
+    initializeEnhancements();
+    updateTimestamp();
+    setInterval(updateTimestamp, 1000); // Update every second
 
     // Auto-hide alerts after 5 seconds
     setTimeout(function() {
@@ -161,11 +166,215 @@ window.refreshOrders = function() {
     location.reload();
 };
 
-// Service Worker for offline capabilities (basic)
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/js/sw.js').then(function(registration) {
-        console.log('SW registered: ', registration);
-    }).catch(function(registrationError) {
-        console.log('SW registration failed: ', registrationError);
+// Modern enhancement functions
+function initializeEnhancements() {
+    // Add loading states to cards
+    addLoadingStates();
+
+    // Enhanced search functionality with debouncing
+    setupEnhancedSearch();
+
+    // Intersection Observer for animations
+    setupScrollAnimations();
+
+    // Enhanced form validations
+    setupFormEnhancements();
+}
+
+function updateTimestamp() {
+    const timestampEl = document.getElementById('last-updated');
+    if (timestampEl) {
+        const now = new Date();
+        timestampEl.textContent = now.toLocaleTimeString();
+    }
+}
+
+function addLoadingStates() {
+    // Add skeleton loading states during data operations
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-loading]') || e.target.closest('[data-loading]')) {
+            const card = e.target.closest('.order-card');
+            if (card) {
+                card.classList.add('loading-card');
+                setTimeout(() => card.classList.remove('loading-card'), 2000);
+            }
+        }
     });
 }
+
+function setupEnhancedSearch() {
+    const searchInput = document.getElementById('orderSearch');
+    if (!searchInput) return;
+
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            performSearch(this.value);
+        }, 300); // Debounce for 300ms
+    });
+}
+
+function performSearch(searchTerm) {
+    const searchValue = searchTerm.toLowerCase().trim();
+    const orderCards = document.querySelectorAll('.order-card');
+    let visibleCount = 0;
+
+    orderCards.forEach((card, index) => {
+        const cardText = card.textContent.toLowerCase();
+        const shouldShow = searchValue === '' || cardText.includes(searchValue);
+
+        if (shouldShow) {
+            card.style.display = 'block';
+            visibleCount++;
+        } else {
+            card.style.display = 'none';
+        }
+    });
+
+    // Update search results count
+    updateSearchResults(visibleCount, orderCards.length, searchValue);
+}
+
+function updateSearchResults(visible, total, searchTerm) {
+    let resultIndicator = document.querySelector('.search-results-indicator');
+
+    if (searchTerm && visible < total) {
+        if (!resultIndicator) {
+            resultIndicator = document.createElement('div');
+            resultIndicator.className = 'alert alert-info search-results-indicator mt-3';
+            const filtersContainer = document.querySelector('.search-filters-container');
+            if (filtersContainer) {
+                filtersContainer.appendChild(resultIndicator);
+            }
+        }
+
+        resultIndicator.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="fas fa-search me-2"></i>
+                    Found <strong>${visible}</strong> of <strong>${total}</strong> orders
+                </span>
+                <button class="btn btn-sm btn-outline-info" onclick="clearAllFilters()">
+                    <i class="fas fa-times"></i> Clear
+                </button>
+            </div>
+        `;
+    } else if (resultIndicator) {
+        resultIndicator.remove();
+    }
+}
+
+function setupScrollAnimations() {
+    // Disabled scroll animations to prevent refresh-like behavior
+    // Order cards will use their initial CSS animations only
+}
+
+function setupFormEnhancements() {
+    // Enhanced form field focus states
+    document.querySelectorAll('.form-control, .form-select').forEach(field => {
+        field.addEventListener('focus', function() {
+            this.classList.add('focus-ring');
+        });
+
+        field.addEventListener('blur', function() {
+            this.classList.remove('focus-ring');
+        });
+    });
+}
+
+// Enhanced global functions
+window.clearAllFilters = function() {
+    const searchInput = document.getElementById('orderSearch');
+    const issueFilter = document.getElementById('issueFilter');
+
+    if (searchInput) searchInput.value = '';
+    if (issueFilter) issueFilter.value = 'all';
+
+    performSearch('');
+    if (window.filterByIssues) filterByIssues();
+
+    // Remove result indicator
+    const resultIndicator = document.querySelector('.search-results-indicator');
+    if (resultIndicator) resultIndicator.remove();
+};
+
+window.refreshOrders = function() {
+    // Show loading toast
+    showToast('Refreshing orders data...', 'info');
+
+    // Add loading state to page
+    document.body.classList.add('loading');
+
+    setTimeout(() => {
+        location.reload();
+    }, 500);
+};
+
+// Enhanced toast system
+function showToast(message, type = 'info', duration = 4000) {
+    // Remove existing toasts
+    document.querySelectorAll('.toast-notification').forEach(toast => toast.remove());
+
+    const toast = document.createElement('div');
+    toast.className = `toast-notification alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
+    toast.style.cssText = `
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 500px;
+        box-shadow: var(--shadow-lg);
+        border: none;
+        animation: slideInRight 0.3s ease-out;
+    `;
+
+    const icon = {
+        'success': 'fas fa-check-circle',
+        'error': 'fas fa-exclamation-circle',
+        'warning': 'fas fa-exclamation-triangle',
+        'info': 'fas fa-info-circle'
+    }[type] || 'fas fa-info-circle';
+
+    toast.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="${icon} me-3"></i>
+            <span>${message}</span>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+
+    document.body.appendChild(toast);
+
+    // Auto remove
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.animation = 'slideOutRight 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, duration);
+}
+
+// Add CSS animations for toasts
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+
+    .loading {
+        cursor: wait;
+    }
+
+    .animate-in {
+        animation: slideInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+`;
+document.head.appendChild(style);
