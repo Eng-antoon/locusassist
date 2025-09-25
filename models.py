@@ -25,21 +25,50 @@ class Order(db.Model):
     tour_name = db.Column(db.String(50))  # Parsed tour name from tour ID
     tour_number = db.Column(db.Integer)  # Extracted number from tour name for sorting
     rider_name = db.Column(db.String(255))
+    rider_id = db.Column(db.String(100))  # Rider ID from fleetInfo
+    rider_phone = db.Column(db.String(20))  # Rider phone number
     vehicle_registration = db.Column(db.String(100))
+    vehicle_id = db.Column(db.String(100))  # Vehicle ID
+    vehicle_model = db.Column(db.String(255))  # Vehicle model name
+    transporter_name = db.Column(db.String(255))  # Transporter name
 
     # Completion data
     completed_on = db.Column(db.DateTime)
 
-    # Live update data from task-search endpoint
-    effective_status = db.Column(db.String(50))  # Real-time status from live updates
-    status_updates = db.Column(db.Text)  # JSON string of status history
-    cancellation_reason = db.Column(db.String(500))  # Cancellation reason if cancelled
-    last_status_update = db.Column(db.DateTime)  # Timestamp of last status change
-    status_actor = db.Column(db.String(255))  # Who made the last status change
+    # Task-specific data
+    task_source = db.Column(db.String(50))  # Source of the task
+    plan_id = db.Column(db.String(255))  # Planning ID
+    planned_tour_name = db.Column(db.String(255))  # Planned tour name
+    sequence_in_batch = db.Column(db.Integer)  # Order sequence in batch
+    partially_delivered = db.Column(db.Boolean, default=False)  # Partial delivery flag
+    reassigned = db.Column(db.Boolean, default=False)  # Reassignment flag
+    rejected = db.Column(db.Boolean, default=False)  # Rejection flag
+    unassigned = db.Column(db.Boolean, default=False)  # Unassigned flag
+
+    # Cancellation information
+    cancellation_reason = db.Column(db.String(500))  # Reason for cancellation if order was cancelled
+
+    # Performance metrics
+    tardiness = db.Column(db.Float)  # Delay in delivery
+    sla_status = db.Column(db.String(50))  # SLA compliance status
+    amount_collected = db.Column(db.Float)  # Amount collected
+    effective_tat = db.Column(db.Integer)  # Effective turn-around time
+    allowed_dwell_time = db.Column(db.Integer)  # Allowed dwell time
+
+    # Time tracking
+    eta_updated_on = db.Column(db.DateTime)  # ETA update timestamp
+    tour_updated_on = db.Column(db.DateTime)  # Tour update timestamp
+    initial_assignment_at = db.Column(db.DateTime)  # Initial assignment time
+    initial_assignment_by = db.Column(db.String(255))  # Who assigned initially
+
+    # Additional metadata
+    task_time_slot = db.Column(db.String(255))  # Task time slot as string
+    skills = db.Column(db.Text)  # JSON string of required skills
+    tags = db.Column(db.Text)  # JSON string of tags
+    custom_fields = db.Column(db.Text)  # JSON string of custom fields
 
     # Raw order data from Locus API
     raw_data = db.Column(db.Text)  # JSON string
-    live_update_data = db.Column(db.Text)  # JSON string from live updates endpoint
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -58,11 +87,6 @@ class Order(db.Model):
             'client_id': self.client_id,
             'date': self.date.isoformat() if self.date else None,
             'order_status': self.order_status,
-            'effective_status': self.effective_status,
-            'status_updates': json.loads(self.status_updates) if self.status_updates else None,
-            'cancellation_reason': self.cancellation_reason,
-            'last_status_update': self.last_status_update.isoformat() if self.last_status_update else None,
-            'status_actor': self.status_actor,
             'location_name': self.location_name,
             'location_address': self.location_address,
             'location_city': self.location_city,
@@ -73,10 +97,41 @@ class Order(db.Model):
             'tour_name': self.tour_name,
             'tour_number': self.tour_number,
             'rider_name': self.rider_name,
+            'rider_id': self.rider_id,
+            'rider_phone': self.rider_phone,
             'vehicle_registration': self.vehicle_registration,
+            'vehicle_id': self.vehicle_id,
+            'vehicle_model': self.vehicle_model,
+            'transporter_name': self.transporter_name,
             'completed_on': self.completed_on.isoformat() if self.completed_on else None,
+            # Task-specific data
+            'task_source': self.task_source,
+            'plan_id': self.plan_id,
+            'planned_tour_name': self.planned_tour_name,
+            'sequence_in_batch': self.sequence_in_batch,
+            'partially_delivered': self.partially_delivered,
+            'reassigned': self.reassigned,
+            'rejected': self.rejected,
+            'unassigned': self.unassigned,
+            # Cancellation information
+            'cancellation_reason': self.cancellation_reason,
+            # Performance metrics
+            'tardiness': self.tardiness,
+            'sla_status': self.sla_status,
+            'amount_collected': self.amount_collected,
+            'effective_tat': self.effective_tat,
+            'allowed_dwell_time': self.allowed_dwell_time,
+            # Time tracking
+            'eta_updated_on': self.eta_updated_on.isoformat() if self.eta_updated_on else None,
+            'tour_updated_on': self.tour_updated_on.isoformat() if self.tour_updated_on else None,
+            'initial_assignment_at': self.initial_assignment_at.isoformat() if self.initial_assignment_at else None,
+            'initial_assignment_by': self.initial_assignment_by,
+            # Additional metadata
+            'task_time_slot': self.task_time_slot,
+            'skills': json.loads(self.skills) if self.skills else None,
+            'tags': json.loads(self.tags) if self.tags else None,
+            'custom_fields': json.loads(self.custom_fields) if self.custom_fields else None,
             'raw_data': json.loads(self.raw_data) if self.raw_data else None,
-            'live_update_data': json.loads(self.live_update_data) if self.live_update_data else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

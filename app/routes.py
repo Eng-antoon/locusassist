@@ -7,13 +7,195 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 import io
 
-from models import ValidationResult
+from models import ValidationResult, Order
 from app.auth import LocusAuth
 from app.validators import GoogleAIValidator
 from app.utils import rate_limit_api_call, api_rate_limiter
 from app.filters import filter_service
 
 logger = logging.getLogger(__name__)
+
+def transform_task_to_order_format(task_data):
+    """Transform task API response to match expected order format"""
+    try:
+        # Create a unified order structure from task data
+        order_data = {}
+
+        # Basic task information - CRITICAL: Use taskStatus as the primary status
+        order_data['id'] = task_data.get('taskId')
+        order_data['order_status'] = task_data.get('taskStatus', 'UNKNOWN')  # This is the correct status
+        order_data['client_id'] = task_data.get('clientId')
+
+        # IMPORTANT: Also set these aliases for template compatibility
+        order_data['orderStatus'] = task_data.get('taskStatus', 'UNKNOWN')
+        order_data['effective_status'] = task_data.get('taskStatus', 'UNKNOWN')
+
+        # Get cancellation information from visits
+        cancelled_visit = None
+        cancellation_reason = None
+
+        # Look through all visits to find cancellation information
+        for visit in task_data.get('visits', []):
+            if visit.get('cancelledReason'):
+                cancelled_visit = visit
+                cancellation_reason = visit.get('cancelledReason')
+                break
+
+        # Set cancellation information
+        order_data['cancellation_reason'] = cancellation_reason
+        if cancelled_visit:
+            order_data['cancelled_source'] = cancelled_visit.get('cancelledSource')
+
+        # Log for debugging
+        logger.info(f"Task {task_data.get('taskId')}: status={task_data.get('taskStatus')}, cancellation={cancellation_reason}")
+
+        # Extract timing information
+        order_data['creation_time'] = task_data.get('creationTime')
+        order_data['completion_time'] = task_data.get('completionTime')
+
+        # Extract location information from visits
+        customer_visit = None
+        for visit in task_data.get('visits', []):
+            if visit.get('visitType') == 'DROP':
+                customer_visit = visit
+                break
+
+        if customer_visit:
+            chosen_location = customer_visit.get('chosenLocation', {})
+            address = chosen_location.get('address', {})
+
+            # Create location structure
+            order_data['location'] = {
+                'id': customer_visit.get('locationId', {}).get('locationId'),
+                'name': address.get('placeName', ''),
+                'status': 'ACTIVE',
+                'address': {
+                    'formattedAddress': address.get('formattedAddress', ''),
+                    'city': address.get('city', ''),
+                    'state': address.get('state', ''),
+                    'countryCode': address.get('countryCode', ''),
+                    'pincode': address.get('pincode', '')
+                },
+                'latLng': chosen_location.get('geometry', {}).get('latLng', {})
+            }
+
+            # Extract performance metrics
+            order_data['sla_status'] = customer_visit.get('slaStatus')
+            order_data['tardiness'] = customer_visit.get('tardiness')
+            order_data['sla_breached'] = customer_visit.get('slaBreached')
+
+            # Extract tour information
+            tour_id_info = customer_visit.get('tourId', {})
+            order_data['tour_id'] = tour_id_info.get('tourId')
+            order_data['batch_id'] = customer_visit.get('batchId')
+
+            # Extract assigned user information
+            assigned_user = customer_visit.get('assignedUser', {})
+            order_data['rider_id'] = assigned_user.get('userId')
+
+            # Extract custom fields
+            custom_fields = customer_visit.get('customFields', {})
+            order_data['custom_fields'] = custom_fields
+
+        # Extract line items from orderDetail
+        order_detail = task_data.get('orderDetail', {})
+        if order_detail:
+            line_items = order_detail.get('lineItems', [])
+
+            # Transform line items to match expected format
+            transformed_items = []
+            for item in line_items:
+                transformed_item = {
+                    'id': item.get('id'),
+                    'name': item.get('name'),
+                    'quantity': item.get('quantity', 0),
+                    'description': item.get('description', ''),
+                    'quantityUnit': 'PIECES',  # Default
+                    'handlingUnit': 'PIECES',  # Default
+                    'transactionStatus': item.get('transactionStatus', {})
+                }
+                transformed_items.append(transformed_item)
+
+            order_data['lineItems'] = transformed_items
+
+            # Create metadata structure similar to original order format
+            order_data['orderMetadata'] = {
+                'lineItems': transformed_items
+            }
+
+        # Store original task data for reference
+        order_data['_original_task_data'] = task_data
+        order_data['_is_task_format'] = True
+
+        return order_data
+
+    except Exception as e:
+        logger.error(f"Error transforming task data: {e}")
+        return task_data  # Return original if transformation fails
+
+def store_order_from_api_data(order_data, date_str):
+    """Store order data from API into database"""
+    from models import db
+    from datetime import datetime
+    import json
+
+    try:
+        # Parse the date
+        order_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+        # Create new Order instance
+        new_order = Order(
+            id=order_data.get('id'),
+            client_id=order_data.get('client_id', 'illa-frontdoor'),
+            date=order_date,
+            order_status=order_data.get('order_status', 'UNKNOWN'),
+        )
+
+        # Location data
+        location = order_data.get('location', {})
+        if location:
+            new_order.location_name = location.get('name', '')
+            address = location.get('address', {})
+            new_order.location_address = address.get('formattedAddress', '')
+            new_order.location_city = address.get('city', '')
+            new_order.location_country_code = address.get('countryCode', '')
+
+        # Cancellation information
+        new_order.cancellation_reason = order_data.get('cancellation_reason')
+
+        # Tour information
+        new_order.tour_id = order_data.get('tour_id')
+        new_order.rider_id = order_data.get('rider_id')
+        new_order.batch_id = order_data.get('batch_id')
+
+        # Performance metrics
+        new_order.sla_status = order_data.get('sla_status')
+        new_order.tardiness = order_data.get('tardiness')
+
+        # Timing
+        if order_data.get('completion_time'):
+            try:
+                new_order.completed_on = datetime.fromisoformat(order_data['completion_time'].replace('Z', '+00:00'))
+            except:
+                pass
+
+        # Custom fields
+        if order_data.get('custom_fields'):
+            new_order.custom_fields = json.dumps(order_data['custom_fields'])
+
+        # Raw data
+        new_order.raw_data = json.dumps(order_data)
+
+        # Add to session and commit
+        db.session.add(new_order)
+        db.session.commit()
+
+        logger.info(f"Successfully stored order {order_data.get('id')} from API data")
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error storing order from API data: {e}")
+        raise
 
 def register_routes(app, config):
     """Register all Flask routes"""
@@ -332,17 +514,123 @@ def register_routes(app, config):
     def order_detail(order_id):
         """View detailed order information"""
         date = request.args.get('date', datetime.now().strftime("%Y-%m-%d"))
+        data_source = "Database"  # Default assumption
 
-        # Fetch detailed order information using the new endpoint
-        order_detail_data = locus_auth.get_order_detail(
+        # First, try to get order from database to get enhanced fields
+        db_order = Order.query.filter_by(id=order_id).first()
+
+        # Try to fetch detailed order information, ALWAYS try task endpoint first (richer, more accurate data)
+        order_detail_data = None
+
+        # ALWAYS try task endpoint first as it has the most accurate status information
+        order_detail_data = locus_auth.get_task_detail(
             config.BEARER_TOKEN,
             'illa-frontdoor',
             order_id
         )
 
+        if order_detail_data:
+            # Task API worked - this is the best source
+            data_source = "Task API (Locus Direct)" if not db_order else "Database + Task API"
+            # Transform task data to match expected order structure
+            order_detail_data = transform_task_to_order_format(order_detail_data)
+        else:
+            # Fallback to order endpoint if task endpoint failed
+            logger.warning(f"Task API failed for {order_id}, falling back to order API")
+            order_detail_data = locus_auth.get_order_detail(
+                config.BEARER_TOKEN,
+                'illa-frontdoor',
+                order_id
+            )
+            if order_detail_data:
+                data_source = "Order API (Fallback)" if not db_order else "Database + Order API (Fallback)"
+
         if not order_detail_data:
-            flash(f'Order {order_id} not found or failed to load', 'error')
+            flash(f'Order {order_id} not found or failed to load from both API endpoints', 'error')
             return redirect(url_for('dashboard'))
+
+        # Add data source indicator
+        order_detail_data['_data_source'] = data_source
+        order_detail_data['_from_database'] = db_order is not None
+
+        # If order is not in database but we have API data, store it as backup
+        if not db_order and order_detail_data:
+            try:
+                logger.info(f"Order {order_id} not found in database, storing as backup")
+                store_order_from_api_data(order_detail_data, date)
+                logger.info(f"Successfully stored order {order_id} in database")
+            except Exception as e:
+                logger.error(f"Failed to store order {order_id} in database: {e}")
+
+        # Merge database fields into the API response if we have a database record
+        if db_order:
+            # ALWAYS prefer task API data for status if available (most accurate)
+            if order_detail_data.get('_is_task_format'):
+                # We have task data - keep the task status and use database for enhanced fields only
+                task_status = order_detail_data.get('order_status')
+                logger.info(f"Using task status '{task_status}' over database status '{db_order.order_status}'")
+
+                # Ensure all status fields are consistent with task data
+                order_detail_data['order_status'] = task_status
+                order_detail_data['orderStatus'] = task_status
+                order_detail_data['effective_status'] = task_status
+
+                # For cancellation reason, prefer task data but enhance with database if missing
+                if not order_detail_data.get('cancellation_reason') and db_order.cancellation_reason:
+                    order_detail_data['cancellation_reason'] = db_order.cancellation_reason
+            else:
+                # No task data - use database for status
+                order_detail_data['order_status'] = db_order.order_status
+                order_detail_data['orderStatus'] = db_order.order_status
+                order_detail_data['effective_status'] = db_order.order_status
+                order_detail_data['cancellation_reason'] = db_order.cancellation_reason
+
+            # Add other database fields regardless of source
+            order_detail_data['completed_on'] = db_order.completed_on.isoformat() if db_order.completed_on else None
+            order_detail_data['rider_name'] = db_order.rider_name or order_detail_data.get('orderMetadata', {}).get('tourDetail', {}).get('riderName')
+            order_detail_data['rider_phone'] = db_order.rider_phone
+            order_detail_data['vehicle_registration'] = db_order.vehicle_registration or order_detail_data.get('orderMetadata', {}).get('tourDetail', {}).get('vehicleRegistrationNumber')
+            order_detail_data['location_name'] = db_order.location_name or order_detail_data.get('location', {}).get('name')
+            order_detail_data['location_city'] = db_order.location_city or order_detail_data.get('location', {}).get('address', {}).get('city')
+            order_detail_data['location_address'] = db_order.location_address or order_detail_data.get('location', {}).get('address', {}).get('formattedAddress')
+
+            # Add other useful database fields
+            order_detail_data['tour_id'] = db_order.tour_id
+            order_detail_data['tour_name'] = db_order.tour_name
+            order_detail_data['partially_delivered'] = db_order.partially_delivered
+            order_detail_data['reassigned'] = db_order.reassigned
+            order_detail_data['rejected'] = db_order.rejected
+            order_detail_data['unassigned'] = db_order.unassigned
+            order_detail_data['tardiness'] = db_order.tardiness
+            order_detail_data['sla_status'] = db_order.sla_status
+            order_detail_data['amount_collected'] = db_order.amount_collected
+            order_detail_data['effective_tat'] = db_order.effective_tat
+
+            # Add time tracking fields
+            order_detail_data['eta_updated_on'] = db_order.eta_updated_on.isoformat() if db_order.eta_updated_on else None
+            order_detail_data['tour_updated_on'] = db_order.tour_updated_on.isoformat() if db_order.tour_updated_on else None
+            order_detail_data['initial_assignment_at'] = db_order.initial_assignment_at.isoformat() if db_order.initial_assignment_at else None
+            order_detail_data['initial_assignment_by'] = db_order.initial_assignment_by
+
+            # Parse and add JSON fields
+            try:
+                if db_order.skills:
+                    order_detail_data['skills'] = json.loads(db_order.skills)
+                if db_order.tags:
+                    order_detail_data['tags'] = json.loads(db_order.tags)
+                if db_order.custom_fields:
+                    order_detail_data['custom_fields'] = json.loads(db_order.custom_fields)
+            except json.JSONDecodeError:
+                pass  # Keep original if parsing fails
+
+        else:
+            # No database record - ensure status fields are properly set from API data
+            if order_detail_data.get('_is_task_format'):
+                # Ensure all status fields are set for task data without database
+                task_status = order_detail_data.get('order_status')
+                order_detail_data['orderStatus'] = task_status
+                order_detail_data['effective_status'] = task_status
+                logger.info(f"No database record - using task status '{task_status}' for all status fields")
 
         # Enhance order with validation summary and GRN status (same logic as dashboard)
         order_detail_data['has_grn'] = has_grn_document(order_detail_data)
@@ -380,6 +668,15 @@ def register_routes(app, config):
             order_detail_data['validation_summary'] = {
                 'has_validation': False
             }
+
+        # Debug logging for status verification
+        logger.info(f"Final order data for {order_id}:")
+        logger.info(f"  - order_status: {order_detail_data.get('order_status')}")
+        logger.info(f"  - orderStatus: {order_detail_data.get('orderStatus')}")
+        logger.info(f"  - effective_status: {order_detail_data.get('effective_status')}")
+        logger.info(f"  - cancellation_reason: {order_detail_data.get('cancellation_reason')}")
+        logger.info(f"  - data_source: {order_detail_data.get('_data_source')}")
+        logger.info(f"  - is_task_format: {order_detail_data.get('_is_task_format')}")
 
         return render_template('order_detail.html',
                              order=order_detail_data,

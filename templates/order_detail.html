@@ -33,6 +33,26 @@
     </div>
 </div>
 
+<!-- Data Source Indicator -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="alert {{ 'alert-success' if order._from_database else 'alert-info' }} alert-dismissible fade show" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-{{ 'database' if order._from_database else 'cloud' }} me-2"></i>
+                <div>
+                    <strong>Data Source:</strong> {{ order._data_source }}
+                    {% if order._from_database %}
+                        <br><small class="opacity-75">This order data is enhanced with information stored in our database.</small>
+                    {% else %}
+                        <br><small class="opacity-75">This order was fetched directly from Locus API and has been saved to our database for future reference.</small>
+                    {% endif %}
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+</div>
+
 <!-- Validation Status Section -->
 <div class="row mb-3">
     <div class="col-12">
@@ -309,7 +329,8 @@
                     <h5 class="mb-0">
                         <i class="fas fa-info-circle me-2"></i>Order Information
                     </h5>
-                    <span class="badge {{ 'bg-danger' if (order.effective_status or order.orderStatus) == 'CANCELLED' else 'bg-success' if (order.effective_status or order.orderStatus) == 'COMPLETED' else 'bg-warning' if (order.effective_status or order.orderStatus) in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }} text-white">{{ order.effective_status or order.orderStatus }}</span>
+                    {% set current_status = order.effective_status or order.orderStatus or order.order_status %}
+                    <span class="badge {{ 'bg-danger' if current_status == 'CANCELLED' else 'bg-success' if current_status == 'COMPLETED' else 'bg-warning' if current_status in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }} text-white">{{ current_status }}</span>
                 </div>
             </div>
             <div class="card-body">
@@ -318,14 +339,12 @@
                     <div class="col-md-3">
                         <div class="info-item">
                             <label>Status:</label>
-                            <span class="badge {{ 'bg-danger' if (order.effective_status or order.orderStatus) == 'CANCELLED' else 'bg-success' if (order.effective_status or order.orderStatus) == 'COMPLETED' else 'bg-warning' if (order.effective_status or order.orderStatus) in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }}">{{ order.effective_status or order.orderStatus }}</span>
-                            {% if order.cancellation_reason %}
-                                <div class="mt-2">
-                                    <small class="text-danger">
-                                        <i class="fas fa-times-circle"></i> {{ order.cancellation_reason }}
-                                    </small>
-                                </div>
-                            {% endif %}
+                            <span class="badge {{ 'bg-danger' if current_status == 'CANCELLED' else 'bg-success' if current_status == 'COMPLETED' else 'bg-warning' if current_status in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }}">
+                                {% if current_status == 'CANCELLED' %}
+                                    <i class="fas fa-times-circle me-1"></i>
+                                {% endif %}
+                                {{ current_status }}
+                            </span>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -347,6 +366,97 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Additional Status Information -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>SLA Status:</label>
+                            <span class="badge {{ 'bg-success' if order.sla_status == 'ON_TIME' else 'bg-danger' if order.sla_status == 'DELAYED' else 'bg-secondary' }}">
+                                {{ order.sla_status or 'N/A' }}
+                            </span>
+                        </div>
+                    </div>
+                    {% if order.tardiness %}
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Tardiness:</label>
+                            <span class="badge {{ 'bg-danger' if order.tardiness > 30 else 'bg-warning' if order.tardiness > 0 else 'bg-success' }}">
+                                {{ order.tardiness|round(2) }} min
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if order.effective_tat %}
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Effective TAT:</label>
+                            <span>{{ order.effective_tat }} min</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if order.amount_collected %}
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Amount Collected:</label>
+                            <span class="text-success fw-bold">${{ order.amount_collected }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Order Flags -->
+                {% if order.partially_delivered or order.reassigned or order.rejected or order.unassigned %}
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="info-item">
+                            <label>Order Flags:</label>
+                            <div class="d-flex gap-2 flex-wrap">
+                                {% if order.partially_delivered %}
+                                    <span class="badge bg-warning">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Partially Delivered
+                                    </span>
+                                {% endif %}
+                                {% if order.reassigned %}
+                                    <span class="badge bg-info">
+                                        <i class="fas fa-exchange-alt me-1"></i>Reassigned
+                                    </span>
+                                {% endif %}
+                                {% if order.rejected %}
+                                    <span class="badge bg-danger">
+                                        <i class="fas fa-times me-1"></i>Rejected
+                                    </span>
+                                {% endif %}
+                                {% if order.unassigned %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-user-times me-1"></i>Unassigned
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Cancellation Information -->
+                {% if order.cancellation_reason %}
+                <div class="alert alert-danger mb-4">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Order Cancelled
+                    </h6>
+                    <div class="mb-2">
+                        <strong>Cancellation Reason:</strong> {{ order.cancellation_reason }}
+                    </div>
+                    {% if order.last_status_update %}
+                    <div>
+                        <small class="text-muted">
+                            <i class="fas fa-clock me-1"></i>Last updated: {{ order.last_status_update.split('T')[0] }} {{ order.last_status_update.split('T')[1].split('.')[0] if 'T' in order.last_status_update else '' }}
+                            {% if order.status_actor %} by {{ order.status_actor }}{% endif %}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
 
                 <!-- Location Information -->
                 {% if order.location %}
@@ -394,8 +504,8 @@
                 {% endif %}
 
                 <!-- Tour/Delivery Information -->
-                {% if order.orderMetadata.tourDetail %}
-                {% set tour = order.orderMetadata.tourDetail %}
+                {% if order.orderMetadata.tourDetail or order.tour_id %}
+                {% set tour = order.orderMetadata.tourDetail or {} %}
                 <div class="card mb-4">
                     <div class="card-header">
                         <h6><i class="fas fa-truck me-2"></i>Delivery Information</h6>
@@ -405,39 +515,47 @@
                             <div class="col-md-4">
                                 <div class="info-item mb-2">
                                     <label>Rider:</label>
-                                    <span class="fw-bold">{{ tour.riderName }}</span>
+                                    <span class="fw-bold">{{ order.rider_name or tour.riderName or 'N/A' }}</span>
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Phone:</label>
-                                    <span>{{ tour.riderNumber }}</span>
+                                    <span>{{ order.rider_phone or tour.riderNumber or 'N/A' }}</span>
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Rider ID:</label>
-                                    <span>{{ tour.riderId }}</span>
+                                    <span>{{ order.rider_id or tour.riderId or 'N/A' }}</span>
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="info-item mb-2">
                                     <label>Vehicle:</label>
-                                    <span class="fw-bold">{{ tour.vehicleRegistrationNumber }}</span>
+                                    <span class="fw-bold">{{ order.vehicle_registration or tour.vehicleRegistrationNumber or 'N/A' }}</span>
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Model:</label>
-                                    <span>{{ tour.vehicleModelName or 'N/A' }}</span>
+                                    <span>{{ order.vehicle_model or tour.vehicleModelName or 'N/A' }}</span>
                                 </div>
                                 <div class="info-item mb-2">
-                                    <label>Tour ID:</label>
-                                    <span class="small">{{ tour.tourId }}</span>
+                                    <label>Vehicle ID:</label>
+                                    <span>{{ order.vehicle_id or 'N/A' }}</span>
                                 </div>
                             </div>
                             <div class="col-md-4">
                                 <div class="info-item mb-2">
+                                    <label>Tour ID:</label>
+                                    <span class="small">{{ order.tour_id or tour.tourId or 'N/A' }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Tour Name:</label>
+                                    <span>{{ order.tour_name or 'N/A' }}</span>
+                                </div>
+                                <div class="info-item mb-2">
                                     <label>Sequence:</label>
-                                    <span>{{ tour.sequence }}</span>
+                                    <span>{{ order.sequence_in_batch or tour.sequence or 'N/A' }}</span>
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Transporter:</label>
-                                    <span>{{ tour.transporterName }}</span>
+                                    <span>{{ order.transporter_name or tour.transporterName or 'N/A' }}</span>
                                 </div>
                                 {% if tour.tourStartTime %}
                                 <div class="info-item mb-2">
@@ -447,6 +565,36 @@
                                 {% endif %}
                             </div>
                         </div>
+
+                        <!-- Tour Details -->
+                        {% if order.tour_date or order.tour_plan_id %}
+                        <div class="row mt-3">
+                            {% if order.tour_date %}
+                            <div class="col-md-4">
+                                <div class="info-item mb-2">
+                                    <label>Tour Date:</label>
+                                    <span>{{ order.tour_date }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.tour_plan_id %}
+                            <div class="col-md-4">
+                                <div class="info-item mb-2">
+                                    <label>Plan ID:</label>
+                                    <span>{{ order.tour_plan_id }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.tour_number %}
+                            <div class="col-md-4">
+                                <div class="info-item mb-2">
+                                    <label>Tour Number:</label>
+                                    <span>{{ order.tour_number }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -621,14 +769,118 @@
                             {% if order.orderMetadata.homebaseCompleteOn %}
                             <div class="col-md-6">
                                 <div class="info-item mb-2">
-                                    <label>Completed:</label>
+                                    <label>Completed (API):</label>
                                     <span class="text-success fw-bold">{{ order.orderMetadata.homebaseCompleteOn.split('T')[1].split('.')[0] if 'T' in order.orderMetadata.homebaseCompleteOn else order.orderMetadata.homebaseCompleteOn }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.completed_on %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Completed (DB):</label>
+                                    <span class="text-success fw-bold">{{ order.completed_on.split('T')[1].split('.')[0] if 'T' in order.completed_on else order.completed_on }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.eta_updated_on %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>ETA Updated:</label>
+                                    <span>{{ order.eta_updated_on.split('T')[0] if 'T' in order.eta_updated_on else order.eta_updated_on[:10] }} {{ order.eta_updated_on.split('T')[1].split('.')[0] if 'T' in order.eta_updated_on else '' }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.tour_updated_on %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Tour Updated:</label>
+                                    <span>{{ order.tour_updated_on.split('T')[0] if 'T' in order.tour_updated_on else order.tour_updated_on[:10] }} {{ order.tour_updated_on.split('T')[1].split('.')[0] if 'T' in order.tour_updated_on else '' }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.initial_assignment_at %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Initial Assignment:</label>
+                                    <span>{{ order.initial_assignment_at.split('T')[0] if 'T' in order.initial_assignment_at else order.initial_assignment_at[:10] }} {{ order.initial_assignment_at.split('T')[1].split('.')[0] if 'T' in order.initial_assignment_at else '' }}</span>
+                                    {% if order.initial_assignment_by %}
+                                        <br><small class="text-muted">by {{ order.initial_assignment_by }}</small>
+                                    {% endif %}
                                 </div>
                             </div>
                             {% endif %}
                         </div>
                     </div>
                 </div>
+
+                <!-- Skills, Tags, and Custom Fields -->
+                {% if order.skills or order.tags or order.custom_fields %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-tags me-2"></i>Additional Information</h6>
+                    </div>
+                    <div class="card-body">
+                        {% if order.skills %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <div class="info-item">
+                                    <label>Required Skills:</label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        {% if order.skills is string %}
+                                            <span class="badge bg-primary">{{ order.skills }}</span>
+                                        {% else %}
+                                            {% for skill in order.skills %}
+                                                <span class="badge bg-primary">{{ skill }}</span>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if order.tags %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <div class="info-item">
+                                    <label>Tags:</label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        {% if order.tags is string %}
+                                            <span class="badge bg-info">{{ order.tags }}</span>
+                                        {% else %}
+                                            {% for tag in order.tags %}
+                                                <span class="badge bg-info">{{ tag }}</span>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if order.custom_fields %}
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="info-item">
+                                    <label>Custom Fields:</label>
+                                    <div class="mt-2">
+                                        {% if order.custom_fields is mapping %}
+                                            {% for key, value in order.custom_fields.items() %}
+                                                <div class="mb-2">
+                                                    <strong>{{ key }}:</strong> {{ value }}
+                                                </div>
+                                            {% endfor %}
+                                        {% else %}
+                                            <pre class="small">{{ order.custom_fields }}</pre>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
 
                 <!-- Homebase Information -->
                 {% if order.homebase %}

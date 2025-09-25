@@ -695,9 +695,15 @@ class EnhancedFilters {
                 <div class="card-body order-card-content">
                     <!-- Status Badges -->
                     <div class="d-flex flex-wrap gap-2 mb-3">
-                        <span class="status-indicator success">
-                            ${order.order_status}
+                        <span class="status-indicator ${order.order_status === 'CANCELLED' ? 'danger cancelled' : order.order_status === 'COMPLETED' ? 'success' : order.order_status === 'EXECUTING' || order.order_status === 'ONGOING' ? 'warning' : 'secondary'}">
+                            ${order.order_status === 'CANCELLED' ? '<i class="fas fa-times-circle me-1"></i>' : ''}${order.order_status}
                         </span>
+
+                        ${order.cancellation_reason ? `
+                            <span class="status-indicator danger" title="Cancellation Reason">
+                                <i class="fas fa-exclamation-triangle me-1"></i>${order.cancellation_reason}
+                            </span>
+                        ` : ''}
 
                         ${!order.has_grn ?
                             `<span class="status-indicator danger" title="No GRN document available for this order">
