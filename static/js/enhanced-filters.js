@@ -317,6 +317,12 @@ class EnhancedFilters {
             todayBtn.addEventListener('click', () => this.loadTodayOrders());
         }
 
+        // Refresh Data button
+        const refreshBtn = document.getElementById('refresh-data-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.refreshOrders());
+        }
+
         // Validate All button
         const validateAllBtn = document.getElementById('validate-all-btn');
         if (validateAllBtn) {
@@ -1019,13 +1025,52 @@ class EnhancedFilters {
     updateResultsSummary(result) {
         const summaryElement = document.getElementById('results-summary');
         if (summaryElement) {
+            // Get date display info from result or form inputs
+            let dateDisplay = '';
+            const dateFrom = document.getElementById('filter-date-from')?.value;
+            const dateTo = document.getElementById('filter-date-to')?.value;
+
+            if (dateFrom && dateTo) {
+                dateDisplay = dateFrom === dateTo ? `for ${dateFrom}` : `for ${dateFrom} to ${dateTo}`;
+            } else if (dateFrom) {
+                dateDisplay = `for ${dateFrom}`;
+            }
+
             summaryElement.innerHTML = `
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
-                    Found <strong>${result.total_count}</strong> orders matching your filters
+                    Found <strong>${result.total_count}</strong> orders ${dateDisplay}
                     ${result.status_totals ? this.renderStatusBreakdown(result.status_totals) : ''}
                 </div>
             `;
+        }
+
+        // Also update the page header with current filter date
+        this.updatePageHeaderDate();
+    }
+
+    updatePageHeaderDate() {
+        const dateFrom = document.getElementById('filter-date-from')?.value;
+        const dateTo = document.getElementById('filter-date-to')?.value;
+
+        // Find or create the date badge in the header
+        const headerTitle = document.querySelector('.text-gradient');
+        let dateBadge = headerTitle?.querySelector('.header-date-badge');
+
+        if (dateFrom && dateTo) {
+            const dateText = dateFrom === dateTo ? dateFrom : `${dateFrom} to ${dateTo}`;
+
+            if (dateBadge) {
+                dateBadge.innerHTML = `<i class="fas fa-calendar-alt me-1" style="color: #0d6efd;"></i>${dateText}`;
+            } else if (headerTitle) {
+                headerTitle.innerHTML += `
+                    <span class="header-date-badge ms-2" style="font-size: 0.7em; vertical-align: middle; color: #000000; font-weight: bold; background: rgba(255, 255, 255, 0.9); padding: 4px 8px; border-radius: 4px; border: 1px solid #dee2e6;">
+                        <i class="fas fa-calendar-alt me-1" style="color: #0d6efd;"></i>${dateText}
+                    </span>
+                `;
+            }
+        } else if (dateBadge) {
+            dateBadge.remove();
         }
     }
 
@@ -1217,18 +1262,101 @@ class EnhancedFilters {
         });
     }
 
-    setLoadingState(loading) {
+    setLoadingState(loading, message = 'Applying Filters...') {
         this.isLoading = loading;
         const applyBtn = document.getElementById('apply-filters-btn');
+        const refreshBtn = document.getElementById('refresh-data-btn');
 
         if (applyBtn) {
             if (loading) {
                 applyBtn.disabled = true;
-                applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Applying Filters...';
+                applyBtn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>${message}`;
             } else {
                 applyBtn.disabled = false;
                 applyBtn.innerHTML = '<i class="fas fa-search me-1"></i>Apply Filters';
             }
+        }
+
+        if (refreshBtn) {
+            if (loading) {
+                refreshBtn.disabled = true;
+                refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing...';
+            } else {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="fas fa-sync me-1"></i>Refresh Data';
+            }
+        }
+    }
+
+    async refreshOrders() {
+        if (this.isLoading) return;
+
+        try {
+            this.setLoadingState(true, 'Refreshing data...');
+
+            // Collect current filter data to determine refresh scope
+            const filterData = this.collectFilterData();
+            const dateFrom = filterData.date_from;
+            const dateTo = filterData.date_to;
+
+            let refreshData = {
+                force_refresh: true
+            };
+
+            // Determine if this is a date range or single date refresh
+            if (dateFrom && dateTo && dateFrom !== dateTo) {
+                // Date range refresh
+                refreshData.date_from = dateFrom;
+                refreshData.date_to = dateTo;
+                refreshData.order_status = filterData.order_status || 'all';
+
+                this.showMessage(`🔄 Refreshing data for date range ${dateFrom} to ${dateTo}...`, 'info');
+            } else if (dateFrom) {
+                // Single date refresh
+                refreshData.date = dateFrom;
+                refreshData.order_status = filterData.order_status || 'all';
+
+                this.showMessage(`🔄 Refreshing data for ${dateFrom}...`, 'info');
+            } else {
+                // No date specified, use today
+                const today = new Date().toISOString().split('T')[0];
+                refreshData.date = today;
+
+                this.showMessage(`🔄 Refreshing data for today (${today})...`, 'info');
+            }
+
+            // Call refresh API
+            const response = await fetch('/api/refresh-orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(refreshData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Show success message
+                this.showMessage(result.message, 'success');
+
+                // Re-apply current filters to show refreshed data
+                setTimeout(() => {
+                    this.applyFilters();
+                }, 1000);
+            } else {
+                this.showMessage(result.message || 'Failed to refresh data', 'error');
+            }
+
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+            this.showMessage(`Error refreshing data: ${error.message}`, 'error');
+        } finally {
+            this.setLoadingState(false);
         }
     }
 

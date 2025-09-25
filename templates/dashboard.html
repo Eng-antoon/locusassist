@@ -22,6 +22,11 @@
             <div>
                 <h1 class="text-gradient mb-2">
                     <i class="fas fa-tachometer-alt me-3"></i>Orders Dashboard
+                    {% if date_display %}
+                        <span class="header-date-badge ms-2" style="font-size: 0.7em;vertical-align: middle;/* color: #000000 !important; */font-weight: bold;/* background: rgba(255, 255, 255, 0.9); */padding: 4px 8px;/* border-radius: 4px; *//* border: 1px solid #dee2e6; */">
+                            <i class="fas fa-calendar-alt me-1" style="color: #0d6efd;"></i>{{ date_display }}
+                        </span>
+                    {% endif %}
                 </h1>
                 <p class="text-muted mb-0">Real-time logistics management and validation system</p>
                 {% if orders_data.pagesFetched %}
@@ -54,7 +59,12 @@
             <i class="fas fa-box"></i>
         </div>
         <div class="stat-value">{{ orders_data.orders|length }}</div>
-        <div class="stat-label">Total Orders</div>
+        <div class="stat-label">
+            Total Orders
+            {% if date_display %}
+                <small class="d-block text-muted" style="font-size: 0.75em;">{{ date_display }}</small>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Order Status Breakdown Cards -->
@@ -261,6 +271,10 @@
                             <i class="fas fa-calendar-day me-1"></i>
                             Today's Orders
                         </button>
+                        <button class="btn btn-outline-warning" id="refresh-data-btn">
+                            <i class="fas fa-sync me-1"></i>
+                            Refresh Data
+                        </button>
                     </div>
 
                     <!-- Validate All Button (Relocated) -->
@@ -288,7 +302,7 @@
                     <i class="fas fa-info-circle me-2"></i>
                     Found <strong>{{ orders_data.orders|length }}</strong>
                     {% if selected_order_status == 'all' %}orders{% else %}{{ selected_order_status|title }} orders{% endif %}
-                    for {{ selected_date }}
+                    for {% if date_display %}{{ date_display }}{% else %}{{ selected_date }}{% endif %}
                     {% if orders_data.statusTotals and orders_data.statusTotals|length > 1 %}
                         <div class="mt-2 small">
                             <strong>Status breakdown:</strong>
@@ -580,7 +594,7 @@
         </div>
         <h3 class="empty-state-title">No Orders Found</h3>
         <p class="empty-state-description">
-            No completed orders found for {{ selected_date }}. Try selecting a different date or check your filters.
+            No orders found for {% if date_display %}{{ date_display }}{% else %}{{ selected_date }}{% endif %}. Try selecting a different date or check your filters.
         </p>
         <button class="btn btn-primary btn-icon hover-lift mt-3" onclick="location.reload()">
             <i class="fas fa-sync-alt"></i>
@@ -1142,5 +1156,16 @@ document.querySelectorAll('.order-json').forEach(function(element) {
         // Already formatted
     }
 });
+
+// Global refresh function for main dashboard refresh button
+function refreshOrders() {
+    if (typeof enhancedFilters !== 'undefined' && enhancedFilters) {
+        // Use the enhanced filters refresh method
+        enhancedFilters.refreshOrders();
+    } else {
+        // Fallback: simple page reload for compatibility
+        location.reload();
+    }
+}
 </script>
 {% endblock %}

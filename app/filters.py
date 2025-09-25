@@ -13,6 +13,9 @@ class OrderFilterService:
 
     def __init__(self):
         self.available_filters = self._generate_available_filters()
+        # Cache for filter results to improve performance
+        self._filter_cache = {}
+        self._cache_timeout = 300  # 5 minutes cache timeout
 
     def _generate_available_filters(self):
         """Dynamically generate available filter options based on database schema"""
@@ -203,9 +206,30 @@ class OrderFilterService:
         """Return all available filter configurations"""
         return self.available_filters
 
+    def _get_cache_key(self, filters_data):
+        """Generate cache key from filter data"""
+        import hashlib
+        import json
+
+        # Create a sorted dictionary for consistent cache keys
+        cache_data = {}
+        for key, value in sorted(filters_data.items()):
+            if key != 'page':  # Don't include page in cache key for result reuse
+                cache_data[key] = value
+
+        cache_string = json.dumps(cache_data, sort_keys=True)
+        return hashlib.md5(cache_string.encode()).hexdigest()
+
+    def _is_cache_valid(self, cache_entry):
+        """Check if cache entry is still valid"""
+        import time
+        return time.time() - cache_entry['timestamp'] < self._cache_timeout
+
     def apply_filters(self, filters_data):
         """
         Apply filters to order query and return filtered results
+        Handles day-by-day API fetching for date ranges with missing database data
+        Uses caching for improved performance
 
         Args:
             filters_data (dict): Filter criteria from the frontend
@@ -214,6 +238,49 @@ class OrderFilterService:
             dict: Filtered order results with metadata
         """
         try:
+            import time
+
+            # Generate cache key (excluding pagination)
+            cache_key = self._get_cache_key(filters_data)
+
+            # Check cache first (for non-paginated results)
+            if cache_key in self._filter_cache and self._is_cache_valid(self._filter_cache[cache_key]):
+                cached_result = self._filter_cache[cache_key]['data'].copy()
+
+                # Apply pagination to cached results
+                page = int(filters_data.get('page', 1))
+                per_page = int(filters_data.get('per_page', 50))
+
+                # Apply pagination to cached full results
+                total_filtered = len(cached_result['full_orders'])
+                start_index = (page - 1) * per_page
+                end_index = start_index + per_page
+                paginated_orders = cached_result['full_orders'][start_index:end_index]
+
+                cached_result.update({
+                    'orders': paginated_orders,
+                    'page': page,
+                    'per_page': per_page,
+                    'total_pages': max(1, (total_filtered + per_page - 1) // per_page),
+                    'from_cache': True
+                })
+
+                return cached_result
+            from datetime import datetime, timedelta
+            from app.auth import LocusAuth
+            from flask import current_app
+
+            # Check if we need to fetch missing data from API
+            date_from = filters_data.get('date_from')
+            date_to = filters_data.get('date_to')
+
+            if date_from and date_to:
+                # Check for missing data and fetch if needed
+                self._ensure_data_for_date_range(date_from, date_to, filters_data, current_app.config)
+            elif date_from and not date_to:
+                # Single date filtering
+                self._ensure_data_for_date_range(date_from, date_from, filters_data, current_app.config)
+
             # Start with base query and order by date DESC for recent orders first
             query = db.session.query(Order).order_by(Order.date.desc(), Order.created_at.desc())
 
@@ -259,16 +326,49 @@ class OrderFilterService:
                 if status:
                     status_totals[status] = status_totals.get(status, 0) + 1
 
-            return {
+            # Calculate day-specific totals for date range filtering
+            day_totals = self._calculate_day_totals(filtered_orders, filters_data)
+
+            # Get date range info for display
+            date_info = self._get_date_range_info(filters_data)
+
+            # Prepare result
+            result = {
                 'orders': paginated_orders,  # Only current page orders
+                'full_orders': filtered_orders,  # Store full results for cache
                 'total_count': total_filtered,  # Total filtered count
                 'page': page,
                 'per_page': per_page,
                 'total_pages': max(1, (total_filtered + per_page - 1) // per_page),
                 'status_totals': status_totals,
+                'day_totals': day_totals,
+                'date_info': date_info,
                 'applied_filters': filters_data,
                 'success': True
             }
+
+            # Cache the result (excluding pagination-specific data)
+            cache_entry = {
+                'data': {
+                    'full_orders': filtered_orders,
+                    'total_count': total_filtered,
+                    'status_totals': status_totals,
+                    'day_totals': day_totals,
+                    'date_info': date_info,
+                    'applied_filters': filters_data,
+                    'success': True
+                },
+                'timestamp': time.time()
+            }
+            self._filter_cache[cache_key] = cache_entry
+
+            # Clean up old cache entries (keep cache size manageable)
+            if len(self._filter_cache) > 50:
+                oldest_key = min(self._filter_cache.keys(),
+                                key=lambda k: self._filter_cache[k]['timestamp'])
+                del self._filter_cache[oldest_key]
+
+            return result
 
         except Exception as e:
             import traceback
@@ -473,6 +573,342 @@ class OrderFilterService:
                 filtered_orders.append(order)
 
         return filtered_orders
+
+    def _ensure_data_for_date_range(self, date_from, date_to, filters_data, config=None):
+        """
+        Ensure data exists in database for the date range, fetch from API if missing
+        """
+        try:
+            from datetime import datetime, timedelta
+            from app.auth import LocusAuth
+            from flask import current_app
+            import logging
+
+            logger = logging.getLogger(__name__)
+
+            # Parse dates
+            start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+            end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+            # Generate list of dates in the range
+            current_date = start_date
+            dates_to_check = []
+            while current_date <= end_date:
+                dates_to_check.append(current_date.strftime('%Y-%m-%d'))
+                current_date += timedelta(days=1)
+
+            logger.info(f"Checking data for date range: {dates_to_check}")
+
+            # Check which dates have data in database
+            missing_dates = []
+            for date_str in dates_to_check:
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+                count = db.session.query(Order).filter(Order.date == date_obj).count()
+                if count == 0:
+                    missing_dates.append(date_str)
+                    logger.info(f"No data found for date {date_str}, adding to fetch list")
+                else:
+                    logger.info(f"Found {count} orders for date {date_str} in database")
+
+            if not missing_dates:
+                logger.info("All dates have data in database, no API fetch needed")
+                return
+
+            logger.info(f"Fetching data from API for missing dates: {missing_dates}")
+
+            # Get app config and initialize auth
+            if config is None:
+                config = getattr(current_app, 'config', None)
+            if not config or not hasattr(config, 'BEARER_TOKEN'):
+                logger.warning("No bearer token available, skipping API fetch")
+                return
+
+            locus_auth = LocusAuth(config)
+
+            # Parse order status filter for API
+            order_statuses = None
+            if filters_data.get('order_status') and filters_data['order_status'] != 'all':
+                if isinstance(filters_data['order_status'], list):
+                    order_statuses = filters_data['order_status']
+                else:
+                    order_statuses = [filters_data['order_status']]
+
+            # Fetch data for each missing date
+            total_fetched = 0
+            for date_str in missing_dates:
+                try:
+                    logger.info(f"Fetching data for date {date_str}")
+                    orders_data = locus_auth.get_orders(
+                        config.BEARER_TOKEN,
+                        'illa-frontdoor',
+                        date=date_str,
+                        fetch_all=True,
+                        order_statuses=order_statuses
+                    )
+
+                    if orders_data and orders_data.get('orders'):
+                        count = len(orders_data['orders'])
+                        total_fetched += count
+                        logger.info(f"Fetched {count} orders for date {date_str}")
+
+                        # Cache the data to database
+                        locus_auth.cache_orders_to_database(orders_data, 'illa-frontdoor', date_str)
+                        logger.info(f"Cached {count} orders for date {date_str} to database")
+                    else:
+                        logger.info(f"No orders found for date {date_str}")
+
+                except Exception as e:
+                    logger.error(f"Error fetching data for date {date_str}: {e}")
+                    continue
+
+            logger.info(f"Day-by-day fetch completed: {total_fetched} orders fetched across {len(missing_dates)} dates")
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in _ensure_data_for_date_range: {e}")
+            # Don't raise the error - just log it and continue with existing data
+
+    def refresh_date_range_data(self, date_from, date_to, filters_data, force_refresh=False, config=None):
+        """
+        Refresh data for a date range by fetching fresh data from API day by day
+        """
+        try:
+            from datetime import datetime, timedelta
+            from app.auth import LocusAuth
+            from flask import current_app
+            import logging
+
+            logger = logging.getLogger(__name__)
+
+            # Parse dates
+            start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+            end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+
+            # Generate list of dates in the range
+            current_date = start_date
+            dates_to_refresh = []
+            while current_date <= end_date:
+                dates_to_refresh.append(current_date.strftime('%Y-%m-%d'))
+                current_date += timedelta(days=1)
+
+            logger.info(f"Refreshing data for date range: {dates_to_refresh}")
+
+            # Get app config and initialize auth
+            if config is None:
+                config = getattr(current_app, 'config', None)
+            if not config or not hasattr(config, 'BEARER_TOKEN'):
+                logger.error("No bearer token available for refresh")
+                return {'success': False, 'error': 'No authentication token available'}
+
+            locus_auth = LocusAuth(config)
+
+            # Parse order status filter for API
+            order_statuses = None
+            if filters_data.get('order_status') and filters_data['order_status'] != 'all':
+                if isinstance(filters_data['order_status'], list):
+                    order_statuses = filters_data['order_status']
+                else:
+                    order_statuses = [filters_data['order_status']]
+
+            # Refresh data for each date
+            total_refreshed = 0
+            refresh_results = []
+
+            for date_str in dates_to_refresh:
+                try:
+                    logger.info(f"Refreshing data for date {date_str}")
+
+                    if force_refresh:
+                        # Force refresh: clear cache and fetch fresh
+                        orders_data = locus_auth.refresh_orders_force_fresh(
+                            config.BEARER_TOKEN,
+                            'illa-frontdoor',
+                            date=date_str,
+                            fetch_all=True
+                        )
+                    else:
+                        # Smart refresh: merge new data with existing
+                        orders_data = locus_auth.refresh_orders_smart_merge(
+                            config.BEARER_TOKEN,
+                            'illa-frontdoor',
+                            date=date_str,
+                            fetch_all=True,
+                            order_statuses=order_statuses
+                        )
+
+                    if orders_data and orders_data.get('orders'):
+                        count = len(orders_data['orders'])
+                        total_refreshed += count
+                        refresh_results.append({
+                            'date': date_str,
+                            'count': count,
+                            'success': True
+                        })
+                        logger.info(f"Refreshed {count} orders for date {date_str}")
+                    else:
+                        refresh_results.append({
+                            'date': date_str,
+                            'count': 0,
+                            'success': True,
+                            'message': 'No orders found'
+                        })
+                        logger.info(f"No orders found for date {date_str}")
+
+                except Exception as e:
+                    refresh_results.append({
+                        'date': date_str,
+                        'count': 0,
+                        'success': False,
+                        'error': str(e)
+                    })
+                    logger.error(f"Error refreshing data for date {date_str}: {e}")
+                    continue
+
+            success_count = sum(1 for r in refresh_results if r['success'])
+
+            return {
+                'success': True,
+                'total_orders_refreshed': total_refreshed,
+                'dates_processed': len(dates_to_refresh),
+                'dates_successful': success_count,
+                'dates_failed': len(dates_to_refresh) - success_count,
+                'results': refresh_results,
+                'message': f'Refreshed {total_refreshed} orders across {success_count}/{len(dates_to_refresh)} dates'
+            }
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in refresh_date_range_data: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def _calculate_day_totals(self, orders, filters_data):
+        """
+        Calculate totals grouped by day for the filtered orders
+        """
+        try:
+            from datetime import datetime
+            from collections import defaultdict
+
+            day_totals = defaultdict(lambda: {
+                'total_orders': 0,
+                'status_breakdown': defaultdict(int)
+            })
+
+            for order in orders:
+                # Get the order date
+                order_date = order.get('date')
+                if not order_date:
+                    # Try to extract from created_at or other date fields
+                    created_at = order.get('created_at')
+                    if created_at:
+                        if isinstance(created_at, str):
+                            try:
+                                order_date = datetime.fromisoformat(created_at.replace('Z', '+00:00')).date().isoformat()
+                            except:
+                                order_date = 'unknown'
+                        else:
+                            order_date = created_at.date().isoformat()
+                    else:
+                        order_date = 'unknown'
+                elif hasattr(order_date, 'isoformat'):
+                    order_date = order_date.isoformat()
+                elif not isinstance(order_date, str):
+                    order_date = str(order_date)
+
+                # Increment totals for this day
+                day_totals[order_date]['total_orders'] += 1
+
+                # Increment status breakdown for this day
+                status = order.get('order_status', 'UNKNOWN')
+                day_totals[order_date]['status_breakdown'][status] += 1
+
+            # Convert defaultdict to regular dict for JSON serialization
+            result = {}
+            for date, totals in day_totals.items():
+                result[date] = {
+                    'total_orders': totals['total_orders'],
+                    'status_breakdown': dict(totals['status_breakdown'])
+                }
+
+            return result
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error calculating day totals: {e}")
+            return {}
+
+    def _get_date_range_info(self, filters_data):
+        """
+        Get formatted date range information for display
+        """
+        try:
+            from datetime import datetime
+
+            date_from = filters_data.get('date_from')
+            date_to = filters_data.get('date_to')
+
+            if not date_from and not date_to:
+                # Default to today
+                today = datetime.now().strftime('%Y-%m-%d')
+                return {
+                    'single_date': today,
+                    'display': today,
+                    'is_range': False
+                }
+
+            if date_from and date_to:
+                if date_from == date_to:
+                    # Single date
+                    return {
+                        'single_date': date_from,
+                        'display': date_from,
+                        'is_range': False
+                    }
+                else:
+                    # Date range
+                    try:
+                        from_obj = datetime.strptime(date_from, '%Y-%m-%d')
+                        to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+
+                        from_formatted = from_obj.strftime('%b %d, %Y')
+                        to_formatted = to_obj.strftime('%b %d, %Y')
+
+                        return {
+                            'date_from': date_from,
+                            'date_to': date_to,
+                            'display': f"{from_formatted} - {to_formatted}",
+                            'is_range': True
+                        }
+                    except ValueError:
+                        return {
+                            'display': f"{date_from} - {date_to}",
+                            'is_range': True
+                        }
+
+            elif date_from:
+                return {
+                    'single_date': date_from,
+                    'display': date_from,
+                    'is_range': False
+                }
+
+            return {
+                'display': 'All Dates',
+                'is_range': False
+            }
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting date range info: {e}")
+            return {
+                'display': 'Date Range',
+                'is_range': False
+            }
 
     def _calculate_status_totals(self, orders):
         """Calculate order status totals"""

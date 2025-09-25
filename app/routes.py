@@ -354,34 +354,95 @@ def register_routes(app, config):
 
     @app.route('/dashboard')
     def dashboard():
-        # Get today's date for default filter
+        # Get filter parameters with caching support
         today = datetime.now().strftime("%Y-%m-%d")
         selected_date = request.args.get('date', today)
-        selected_order_status = request.args.get('order_status', 'all')  # Default to all orders
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        selected_order_status = request.args.get('order_status', 'all')
 
-        # Validate date format
-        try:
-            datetime.strptime(selected_date, "%Y-%m-%d")
-        except ValueError:
-            # If invalid date, redirect with error message
-            flash(f"Invalid date format: {selected_date}. Please use YYYY-MM-DD format.", "error")
-            return redirect(url_for('dashboard', date=today))
+        # Determine the date range for filtering
+        if date_from and date_to:
+            # Date range filtering
+            start_date = date_from
+            end_date = date_to
+            date_display = f"{date_from} to {date_to}" if date_from != date_to else date_from
+        elif date_from:
+            # Single date from date_from
+            start_date = end_date = date_from
+            date_display = date_from
+        else:
+            # Single date or today (backward compatibility)
+            try:
+                datetime.strptime(selected_date, "%Y-%m-%d")
+                start_date = end_date = selected_date
+                date_display = selected_date
+            except ValueError:
+                flash(f"Invalid date format: {selected_date}. Please use YYYY-MM-DD format.", "error")
+                return redirect(url_for('dashboard', date=today))
 
-        fetch_all = request.args.get('all', 'true').lower() == 'true'  # Default to fetch all
+        fetch_all = request.args.get('all', 'true').lower() == 'true'
 
         # Parse order status filter
         order_statuses = None
         if selected_order_status and selected_order_status.lower() != 'all':
             order_statuses = [selected_order_status.upper()]
 
-        # Fetch orders using bearer token with status filtering
-        orders_data = locus_auth.get_orders(
-            config.BEARER_TOKEN,
-            'illa-frontdoor',
-            date=selected_date,
-            fetch_all=fetch_all,
-            order_statuses=order_statuses
-        )
+        # Use filter service for cached data retrieval
+        filter_data = {
+            'date_from': start_date,
+            'date_to': end_date,
+            'order_status': selected_order_status if selected_order_status != 'all' else None
+        }
+
+        # Apply filters to get cached data
+        filter_result = filter_service.apply_filters(filter_data)
+
+        if filter_result.get('success', False):
+            # Transform filter result to match expected orders_data format
+            orders_data = {
+                'orders': filter_result['orders'],
+                'totalCount': filter_result['total_count'],
+                'statusTotals': filter_result.get('status_totals', {}),
+                'pagesFetched': 'Cached data'
+            }
+        else:
+            # Fallback to API if filter service fails
+            if start_date == end_date:
+                # Single date - use existing API
+                orders_data = locus_auth.get_orders(
+                    config.BEARER_TOKEN,
+                    'illa-frontdoor',
+                    date=start_date,
+                    fetch_all=fetch_all,
+                    order_statuses=order_statuses
+                )
+            else:
+                # Date range - aggregate data day by day
+                orders_data = {'orders': [], 'totalCount': 0, 'statusTotals': {}}
+                current_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+
+                while current_date <= end_date_obj:
+                    daily_data = locus_auth.get_orders(
+                        config.BEARER_TOKEN,
+                        'illa-frontdoor',
+                        date=current_date.strftime('%Y-%m-%d'),
+                        fetch_all=fetch_all,
+                        order_statuses=order_statuses
+                    )
+
+                    if daily_data and daily_data.get('orders'):
+                        orders_data['orders'].extend(daily_data['orders'])
+                        orders_data['totalCount'] += len(daily_data['orders'])
+
+                        # Aggregate status totals
+                        for status, count in daily_data.get('statusTotals', {}).items():
+                            orders_data['statusTotals'][status] = orders_data['statusTotals'].get(status, 0) + count
+
+                    current_date += timedelta(days=1)
+
+                orders_data['pagesFetched'] = f'Date range: {start_date} to {end_date}'
 
         # Enhance orders with validation summaries and GRN status
         if orders_data and orders_data.get('orders'):
@@ -429,6 +490,9 @@ def register_routes(app, config):
         return render_template('dashboard.html',
                              orders_data=orders_data,
                              selected_date=selected_date,
+                             date_from=date_from,
+                             date_to=date_to,
+                             date_display=date_display,
                              selected_order_status=selected_order_status,
                              username='Amin',
                              fetch_all=fetch_all)
@@ -456,52 +520,108 @@ def register_routes(app, config):
 
     @app.route('/api/refresh-orders', methods=['POST'])
     def refresh_orders():
-        """Refresh orders by clearing cache and fetching fresh data from Locus API"""
+        """Refresh orders by clearing cache and fetching fresh data from Locus API
+        Handles single dates and date ranges with day-by-day processing"""
         try:
-            # Get parameters
-            date = request.args.get('date') or datetime.now().strftime("%Y-%m-%d")
-            order_status = request.args.get('order_status', 'all')
+            # Get parameters from request body or query params
+            request_data = {}
+            try:
+                if request.is_json and request.get_data():
+                    request_data = request.get_json() or {}
+            except Exception as json_error:
+                logger.warning(f"Failed to parse JSON from request: {json_error}")
+                request_data = {}
 
-            # Parse order status filter
-            order_statuses = None
-            if order_status and order_status.lower() != 'all':
-                order_statuses = [order_status.upper()]
+            date = request.args.get('date') or request_data.get('date') or datetime.now().strftime("%Y-%m-%d")
+            date_from = request.args.get('date_from') or request_data.get('date_from')
+            date_to = request.args.get('date_to') or request_data.get('date_to')
+            order_status = request.args.get('order_status') or request_data.get('order_status', 'all')
+            force_refresh = request_data.get('force_refresh', False)
 
-            status_msg = f"all statuses" if not order_statuses else ", ".join(order_statuses)
-            logger.info(f"REFRESH REQUEST: Forcing fresh fetch for date {date} (statuses: {status_msg})")
+            # Determine if this is a date range or single date
+            if date_from and date_to:
+                # Date range refresh - handle day by day
+                logger.info(f"REFRESH REQUEST: Date range {date_from} to {date_to}")
 
-            # Smart refresh: fetch fresh data and merge with database (no deletion)
-            orders_data = locus_auth.refresh_orders_smart_merge(
-                config.BEARER_TOKEN,
-                'illa-frontdoor',
-                date=date,
-                fetch_all=True,
-                order_statuses=order_statuses
-            )
+                # Use the filter service to handle date range refresh
+                filters_data = {
+                    'date_from': date_from,
+                    'date_to': date_to,
+                    'order_status': order_status
+                }
 
-            if orders_data:
-                total_count = orders_data.get('totalCount', 0)
-                status_totals = orders_data.get('statusTotals', {})
+                result = filter_service.refresh_date_range_data(
+                    date_from, date_to, filters_data, force_refresh, config
+                )
 
-                # Create summary message with status breakdown
-                status_breakdown = ""
-                if status_totals:
-                    status_breakdown = " | Status breakdown: " + ", ".join([f"{status}: {count}" for status, count in status_totals.items()])
+                if result['success']:
+                    return jsonify({
+                        'success': True,
+                        'message': f'✅ {result["message"]}',
+                        'total_orders_refreshed': result['total_orders_refreshed'],
+                        'dates_processed': result['dates_processed'],
+                        'dates_successful': result['dates_successful'],
+                        'dates_failed': result['dates_failed'],
+                        'date_from': date_from,
+                        'date_to': date_to,
+                        'results': result['results']
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': f'❌ Error refreshing date range: {result.get("error", "Unknown error")}'
+                    }), 500
 
-                return jsonify({
-                    'success': True,
-                    'message': f'✅ Refreshed data from Locus API. Found {total_count} orders for {date}{status_breakdown}',
-                    'total_orders_count': total_count,
-                    'date': date,
-                    'order_status': order_status,
-                    'status_totals': status_totals,
-                    'orders': orders_data.get('orders', [])
-                })
             else:
-                return jsonify({
-                    'success': False,
-                    'message': 'Failed to refresh orders from API'
-                }), 500
+                # Single date refresh (existing logic)
+                # Parse order status filter
+                order_statuses = None
+                if order_status and order_status.lower() != 'all':
+                    order_statuses = [order_status.upper()]
+
+                status_msg = f"all statuses" if not order_statuses else ", ".join(order_statuses)
+                logger.info(f"REFRESH REQUEST: Forcing fresh fetch for date {date} (statuses: {status_msg})")
+
+                # Smart refresh: fetch fresh data and merge with database (no deletion)
+                if force_refresh:
+                    orders_data = locus_auth.refresh_orders_force_fresh(
+                        config.BEARER_TOKEN,
+                        'illa-frontdoor',
+                        date=date,
+                        fetch_all=True
+                    )
+                else:
+                    orders_data = locus_auth.refresh_orders_smart_merge(
+                        config.BEARER_TOKEN,
+                        'illa-frontdoor',
+                        date=date,
+                        fetch_all=True,
+                        order_statuses=order_statuses
+                    )
+
+                if orders_data:
+                    total_count = orders_data.get('totalCount', 0)
+                    status_totals = orders_data.get('statusTotals', {})
+
+                    # Create summary message with status breakdown
+                    status_breakdown = ""
+                    if status_totals:
+                        status_breakdown = " | Status breakdown: " + ", ".join([f"{status}: {count}" for status, count in status_totals.items()])
+
+                    return jsonify({
+                        'success': True,
+                        'message': f'✅ Refreshed data from Locus API. Found {total_count} orders for {date}{status_breakdown}',
+                        'total_orders_count': total_count,
+                        'date': date,
+                        'order_status': order_status,
+                        'status_totals': status_totals,
+                        'orders': orders_data.get('orders', [])
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Failed to refresh orders from API'
+                    }), 500
 
         except Exception as e:
             logger.error(f"Error refreshing orders: {e}")
