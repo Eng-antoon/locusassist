@@ -40,8 +40,9 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <select id="issueFilter" class="form-select ms-2" style="width: 180px;" onchange="filterByIssues()">
+            <select id="issueFilter" class="form-select ms-2" style="width: 200px;" onchange="filterByIssues()">
                 <option value="all">All Orders</option>
+                <option value="no-grn">No GRN Available</option>
                 <option value="no-validation">Not Validated</option>
                 <option value="valid">Valid Orders</option>
                 <option value="invalid">Invalid Orders</option>
@@ -82,6 +83,11 @@
                         </h6>
                         <div>
                             <span class="badge bg-success">{{ order.orderStatus }}</span>
+                            {% if not order.has_grn %}
+                                <span class="badge bg-secondary ms-1" title="No GRN document available for this order">
+                                    <i class="fas fa-file-slash me-1"></i>No GRN
+                                </span>
+                            {% endif %}
                             {% if order.validation_summary %}
                                 {% if order.validation_summary.has_validation %}
                                     {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
@@ -252,7 +258,13 @@
                             <i class="fas fa-eye me-1"></i>View Details
                         </button>
                         <div class="validation-section">
-                            {% if order.validation_summary and order.validation_summary.has_validation %}
+                            {% if not order.has_grn %}
+                                <div class="text-center">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>No GRN Available
+                                    </small>
+                                </div>
+                            {% elif order.validation_summary and order.validation_summary.has_validation %}
                                 <button class="btn btn-sm btn-warning reprocess-order-btn"
                                         data-order-id="{{ order.id if order.id else loop.index0 }}"
                                         data-date="{{ selected_date }}"
@@ -538,8 +550,14 @@ async function validateAllOrders() {
             const apiCalls = result.api_calls_made || 0;
             const cachedResults = result.cached_results || 0;
             const skippedOrders = result.skipped || 0;
+            const ordersWithoutGrn = result.orders_without_grn || 0;
+            const ordersWithGrn = result.orders_with_grn || 0;
 
             let summaryMessage = `Batch validation completed!\n✅ Valid orders: ${validCount}/${totalCount}\n❌ Invalid orders: ${totalCount - validCount}`;
+
+            if (ordersWithoutGrn > 0) {
+                summaryMessage += `\n\n📄 GRN Status:\n✅ Orders with GRN: ${ordersWithGrn}\n❌ Orders without GRN: ${ordersWithoutGrn} (excluded from validation)`;
+            }
 
             if (result.validate_mode === 'unvalidated_only' || apiCalls < result.total_orders) {
                 summaryMessage += `\n\n💰 Cost Optimization:\n📞 API calls made: ${apiCalls}\n💾 From cache: ${cachedResults}\n⏭️ Skipped (already validated): ${skippedOrders}`;
@@ -674,6 +692,7 @@ function filterByIssues() {
         const validBadge = card.querySelector('.badge:contains("Valid")') || card.querySelector('.badge .fa-check-circle');
         const issuesBadge = card.querySelector('.badge:contains("Issues")') || card.querySelector('.badge .fa-exclamation-triangle');
         const noDocBadge = card.querySelector('.badge:contains("No Doc")') || card.querySelector('.badge .fa-file-times');
+        const noGrnBadge = card.querySelector('.badge:contains("No GRN")') || card.querySelector('.badge .fa-file-slash');
         const unvalidatedBadge = card.querySelector('.badge:contains("Unvalidated")') || card.querySelector('.badge .fa-question');
         const missingItemsBadge = card.querySelector('.badge .fa-minus-circle');
         const extraItemsBadge = card.querySelector('.badge .fa-plus-circle');
@@ -693,6 +712,9 @@ function filterByIssues() {
         switch (filterValue) {
             case 'all':
                 shouldShow = true;
+                break;
+            case 'no-grn':
+                shouldShow = noGrnBadge !== null;
                 break;
             case 'no-validation':
                 shouldShow = unvalidatedBadge !== null;
@@ -764,6 +786,7 @@ function updateFilterCount(visible, total, filterType) {
 
 function getFilterDisplayName(filterValue) {
     const filterNames = {
+        'no-grn': 'No GRN Available',
         'no-validation': 'Not Validated',
         'valid': 'Valid Orders',
         'invalid': 'Invalid Orders',

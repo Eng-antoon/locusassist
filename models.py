@@ -34,7 +34,7 @@ class Order(db.Model):
 
     # Relationships
     line_items = db.relationship('OrderLineItem', backref='order', cascade='all, delete-orphan')
-    validations = db.relationship('ValidationResult', backref='order', cascade='all, delete-orphan')
+    # validations relationship removed due to FK constraint removal
 
     def __repr__(self):
         return f'<Order {self.id}>'
@@ -83,7 +83,7 @@ class ValidationResult(db.Model):
     __tablename__ = 'validation_results'
 
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.String(255), db.ForeignKey('orders.id'), nullable=False)
+    order_id = db.Column(db.String(255), nullable=False)  # Removed FK constraint to allow standalone validation results
 
     # Validation metadata
     validation_date = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

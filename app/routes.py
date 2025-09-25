@@ -21,6 +21,61 @@ def register_routes(app, config):
     locus_auth = LocusAuth(config)
     ai_validator = GoogleAIValidator(config)
 
+    def has_grn_document(order_data):
+        """Check if an order has a GRN document available"""
+        try:
+            # Try different possible paths where the GRN might be stored
+            possible_paths = [
+                # Direct path
+                ['orderMetadata', 'customerProofOfCompletion', 'Proof Of Delivery Document', 'Proof Of Delivery Document'],
+                ['orderMetadata', 'customerProofOfCompletion', 'proofOfDeliveryDocument'],
+                ['orderMetadata', 'customerProofOfCompletion', 'deliveryDocument'],
+                # Alternative paths
+                ['proofOfDelivery', 'document'],
+                ['proofOfDelivery', 'documentUrl'],
+                ['proofOfDelivery', 'deliveryDocument'],
+                ['customerProofOfCompletion', 'deliveryDocument'],
+                ['customerProofOfCompletion', 'document'],
+            ]
+
+            # Try each possible path
+            for path in possible_paths:
+                current_data = order_data
+                try:
+                    for key in path:
+                        current_data = current_data[key]
+                    if isinstance(current_data, str) and current_data.startswith('http'):
+                        return True
+                except (KeyError, TypeError):
+                    continue
+
+            # If still no URL, try to find any URL in the proof data
+            proof_data = order_data.get('orderMetadata', {}).get('customerProofOfCompletion', {})
+            if proof_data:
+                def find_urls_recursive(obj, path=""):
+                    urls = []
+                    if isinstance(obj, dict):
+                        for key, value in obj.items():
+                            new_path = f"{path}.{key}" if path else key
+                            if isinstance(value, str) and value.startswith('http'):
+                                urls.append((new_path, value))
+                            elif isinstance(value, (dict, list)):
+                                urls.extend(find_urls_recursive(value, new_path))
+                    elif isinstance(obj, list):
+                        for i, item in enumerate(obj):
+                            new_path = f"{path}[{i}]"
+                            urls.extend(find_urls_recursive(item, new_path))
+                    return urls
+
+                found_urls = find_urls_recursive(proof_data)
+                if found_urls:
+                    return True
+
+            return False
+        except Exception as e:
+            logger.error(f"Error checking GRN document for order: {e}")
+            return False
+
     def validate_single_order_worker(order_basic, date, force_reprocess=False):
         """Worker function to validate a single order in a thread"""
         # Create application context for database operations in thread
@@ -48,6 +103,16 @@ def register_routes(app, config):
                         'success': False,
                         'error': 'Could not fetch order details',
                         'is_valid': False
+                    }
+
+                # Check if order has GRN document first
+                if not has_grn_document(order_detail_data):
+                    return {
+                        'order_id': order_id,
+                        'success': False,
+                        'error': 'Order has no GRN document - skipped from validation',
+                        'is_valid': False,
+                        'skipped_no_grn': True
                     }
 
                 # Get GRN document URL
@@ -123,10 +188,14 @@ def register_routes(app, config):
             fetch_all=fetch_all
         )
 
-        # Enhance orders with validation summaries
+        # Enhance orders with validation summaries and GRN status
         if orders_data and orders_data.get('orders'):
             for order in orders_data['orders']:
                 order_id = order.get('id')
+
+                # Check if order has GRN document
+                order['has_grn'] = has_grn_document(order)
+
                 if order_id:
                     # Get validation summary for this order
                     validation_summary = ai_validator.get_stored_validation_result(order_id)
@@ -418,11 +487,22 @@ def register_routes(app, config):
 
             all_orders = orders_data['orders']
 
+            # First, filter out orders without GRN documents
+            orders_with_grn = []
+            orders_without_grn = 0
+            for order in all_orders:
+                if has_grn_document(order):
+                    orders_with_grn.append(order)
+                else:
+                    orders_without_grn += 1
+
+            logger.info(f"Filtered out {orders_without_grn} orders without GRN documents")
+
             # Filter orders based on validation mode to minimize API costs
             orders_to_validate = []
             if validate_mode == 'unvalidated_only':
                 logger.info("Filtering to only unvalidated orders to minimize API costs...")
-                for order in all_orders:
+                for order in orders_with_grn:
                     order_id = order.get('id')
                     if order_id:
                         # Quick check for stored validation result
@@ -430,9 +510,10 @@ def register_routes(app, config):
                         if not stored_result or force_reprocess:
                             orders_to_validate.append(order)
             else:
-                orders_to_validate = all_orders
+                orders_to_validate = orders_with_grn
 
             total_orders = len(all_orders)
+            total_orders_with_grn = len(orders_with_grn)
             orders_to_process = len(orders_to_validate)
 
             logger.info(f"Total orders: {total_orders}, Orders to validate: {orders_to_process}")
@@ -495,13 +576,17 @@ def register_routes(app, config):
             api_calls_made = sum(1 for result in validation_results if not result.get('from_cache', False))
             cached_results = sum(1 for result in validation_results if result.get('from_cache', False))
             skipped_orders = total_orders - orders_to_process
+            skipped_no_grn = sum(1 for result in validation_results if result.get('skipped_no_grn', False))
 
             logger.info(f"Batch validation completed: {processed} processed, {errors} errors")
             logger.info(f"API optimization: {api_calls_made} API calls made, {cached_results} from cache, {skipped_orders} skipped")
+            logger.info(f"Orders excluded: {orders_without_grn} without GRN documents")
 
             return jsonify({
                 'success': True,
                 'total_orders': total_orders,
+                'orders_with_grn': total_orders_with_grn,
+                'orders_without_grn': orders_without_grn,
                 'processed': processed,
                 'errors': errors,
                 'skipped': skipped_orders,
