@@ -421,6 +421,7 @@ class EnhancedFilters {
                 this.currentResults = result;
                 this.displayResults(result);
                 this.updateResultsSummary(result);
+                this.updateTotalsBar(result); // Update interactive totals bar
                 this.showMessage(`Found ${result.total_count} orders matching your filters.`, 'success');
 
                 // Save state to localStorage
@@ -1049,6 +1050,62 @@ class EnhancedFilters {
         this.updatePageHeaderDate();
     }
 
+    updateTotalsBar(result) {
+        // Update the interactive status totals bar with filtered results
+        try {
+            console.log('Updating totals bar with result:', result);
+
+            // Update total count
+            const totalCard = document.querySelector('[data-status="all"] .stat-value');
+            if (totalCard) {
+                totalCard.textContent = result.total_count || 0;
+                document.querySelector('[data-status="all"]').dataset.count = result.total_count || 0;
+            }
+
+            // Update status-specific counts
+            if (result.status_totals) {
+                // First, reset all status cards to 0
+                document.querySelectorAll('.clickable-stat-card:not([data-status="all"])').forEach(card => {
+                    const statusValue = card.querySelector('.stat-value');
+                    if (statusValue) {
+                        statusValue.textContent = '0';
+                        card.dataset.count = '0';
+                        card.style.opacity = '0.4';
+                        card.style.pointerEvents = 'none';
+                    }
+                });
+
+                // Update cards with actual counts
+                Object.entries(result.status_totals).forEach(([status, count]) => {
+                    const statusCard = document.querySelector(`[data-status="${status.toLowerCase()}"] .stat-value`);
+                    if (statusCard) {
+                        statusCard.textContent = count;
+                        const card = document.querySelector(`[data-status="${status.toLowerCase()}"]`);
+                        card.dataset.count = count;
+
+                        // Show/hide based on count
+                        if (count > 0) {
+                            card.style.opacity = '';
+                            card.style.pointerEvents = '';
+                        } else {
+                            card.style.opacity = '0.4';
+                            card.style.pointerEvents = 'none';
+                        }
+                    }
+                });
+            }
+
+            // Update visual indicators based on current active filter
+            const currentOrderStatus = document.getElementById('filter-order-status')?.value;
+            if (typeof updateStatusFilterIndicators === 'function') {
+                updateStatusFilterIndicators(currentOrderStatus?.toLowerCase() || 'all');
+            }
+
+        } catch (error) {
+            console.error('Error updating totals bar:', error);
+        }
+    }
+
     updatePageHeaderDate() {
         const dateFrom = document.getElementById('filter-date-from')?.value;
         const dateTo = document.getElementById('filter-date-to')?.value;
@@ -1397,6 +1454,7 @@ class EnhancedFilters {
 let enhancedFilters;
 document.addEventListener('DOMContentLoaded', function() {
     enhancedFilters = new EnhancedFilters();
+    window.enhancedFilters = enhancedFilters; // Make it globally accessible for quick filters
 });
 
 // Helper function for order detail viewing

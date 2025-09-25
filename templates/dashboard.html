@@ -23,7 +23,7 @@
                 <h1 class="text-gradient mb-2">
                     <i class="fas fa-tachometer-alt me-3"></i>Orders Dashboard
                     {% if date_display %}
-                        <span class="header-date-badge ms-2" style="font-size: 0.7em;vertical-align: middle;/* color: #000000 !important; */font-weight: bold;/* background: rgba(255, 255, 255, 0.9); */padding: 4px 8px;/* border-radius: 4px; *//* border: 1px solid #dee2e6; */">
+                        <span class="header-date-badge ms-2" style="font-size: 0.7em;vertical-align: middle;/* color: #000000 !important; */font-weight: bold;background: transparent; padding: 4px 8px;/* border-radius: 4px; *//* border: 1px solid #dee2e6; */">
                             <i class="fas fa-calendar-alt me-1" style="color: #0d6efd;"></i>{{ date_display }}
                         </span>
                     {% endif %}
@@ -51,75 +51,89 @@
     </div>
 </div>
 
-{% if orders_data and orders_data.orders %}
-<!-- Statistics Cards with Order Status Totals -->
-<div class="order-stats-grid mb-4">
-    <div class="stat-card hover-lift">
-        <div class="stat-icon">
-            <i class="fas fa-box"></i>
-        </div>
-        <div class="stat-value">{{ orders_data.orders|length }}</div>
-        <div class="stat-label">
-            Total Orders
+<!-- Enhanced Interactive Status Totals Bar - Always Visible -->
+<div class="status-totals-bar mb-4">
+    <div class="totals-bar-header d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">
+            <i class="fas fa-chart-bar me-2"></i>
+            Order Status Overview
             {% if date_display %}
-                <small class="d-block text-muted" style="font-size: 0.75em;">{{ date_display }}</small>
+                <span class="header-date-badge ms-2" style="font-size: 0.6em;vertical-align: middle;color: #6c757d;">{{ date_display }}</span>
             {% endif %}
-        </div>
+        </h5>
+        <small class="text-muted">Click status to filter • <span id="filtered-indicator" style="display: none;"><i class="fas fa-filter text-primary"></i> Filtered</span></small>
     </div>
 
-    <!-- Order Status Breakdown Cards -->
-    {% if orders_data.statusTotals %}
-        {% for status, count in orders_data.statusTotals.items() %}
-            <div class="stat-card hover-lift">
-                <div class="stat-icon" style="background:
-                    {% if status == 'COMPLETED' %}rgba(16, 185, 129, 0.1); color: var(--success-color);
-                    {% elif status == 'EXECUTING' %}rgba(59, 130, 246, 0.1); color: var(--primary-color);
-                    {% elif status == 'CANCELLED' %}rgba(239, 68, 68, 0.1); color: var(--danger-color);
-                    {% elif status == 'ASSIGNED' %}rgba(245, 158, 11, 0.1); color: var(--warning-color);
-                    {% else %}rgba(107, 114, 128, 0.1); color: var(--secondary-color);{% endif %}">
-                    <i class="fas fa-
-                        {% if status == 'COMPLETED' %}check-circle
-                        {% elif status == 'EXECUTING' %}truck
-                        {% elif status == 'CANCELLED' %}times-circle
-                        {% elif status == 'ASSIGNED' %}user-check
-                        {% elif status == 'OPEN' %}unlock
-                        {% elif status == 'PARKED' %}pause-circle
-                        {% elif status == 'PLANNING' %}edit
-                        {% elif status == 'PLANNED' %}clipboard-list
-                        {% else %}box{% endif %}"></i>
+    <div class="order-stats-grid">
+        <!-- Total Orders (All) -->
+        <div class="stat-card hover-lift clickable-stat-card" data-status="all" data-count="{% if orders_data and orders_data.orders %}{{ orders_data.orders|length }}{% else %}0{% endif %}" onclick="quickFilterStatus('all')">
+            <div class="stat-icon">
+                <i class="fas fa-box"></i>
+            </div>
+            <div class="stat-value">{% if orders_data and orders_data.orders %}{{ orders_data.orders|length }}{% else %}0{% endif %}</div>
+            <div class="stat-label">
+                All
+                <div class="status-filter-indicator" id="filter-indicator-all" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Order Status Breakdown Cards -->
+        {% if orders_data and orders_data.statusTotals %}
+            {% for status, count in orders_data.statusTotals.items() %}
+                <div class="stat-card hover-lift clickable-stat-card {% if status|lower == selected_order_status|lower %}active-filter{% endif %}"
+                     data-status="{{ status|lower }}"
+                     data-count="{{ count }}"
+                     onclick="quickFilterStatus('{{ status|lower }}')">
+                    <div class="stat-icon" style="background:
+                        {% if status == 'COMPLETED' %}#e8f5e8; color: #28a745;
+                        {% elif status == 'EXECUTING' %}#e3f2fd; color: #007bff;
+                        {% elif status == 'CANCELLED' %}#ffebee; color: #dc3545;
+                        {% elif status == 'WAITING' %}#fff3cd; color: #ffc107;
+                        {% else %}#f8f9fa; color: #6c757d;{% endif %}">
+                        <i class="fas fa-
+                            {% if status == 'COMPLETED' %}check-circle
+                            {% elif status == 'EXECUTING' %}truck
+                            {% elif status == 'CANCELLED' %}times-circle
+                            {% elif status == 'WAITING' %}clock
+                            {% elif status == 'ASSIGNED' %}user-check
+                            {% elif status == 'OPEN' %}unlock
+                            {% elif status == 'PARKED' %}pause-circle
+                            {% elif status == 'PLANNING' %}edit
+                            {% elif status == 'PLANNED' %}clipboard-list
+                            {% else %}box{% endif %}"></i>
+                    </div>
+                    <div class="stat-value">{{ count }}</div>
+                    <div class="stat-label">
+                        {{ status|title }}
+                        <div class="status-filter-indicator" id="filter-indicator-{{ status|lower }}" style="display: none;"></div>
+                    </div>
                 </div>
-                <div class="stat-value">{{ count }}</div>
-                <div class="stat-label">{{ status|title }}</div>
-            </div>
-        {% endfor %}
-    {% else %}
-        <!-- Fallback validation cards if no status totals -->
-        <div class="stat-card hover-lift">
-            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
-                <i class="fas fa-check-circle"></i>
-            </div>
-            <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|selectattr('validation_summary.is_valid')|list|length }}</div>
-            <div class="stat-label">Validated Orders</div>
-        </div>
-
-        <div class="stat-card hover-lift">
-            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
-                <i class="fas fa-exclamation-triangle"></i>
-            </div>
-            <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|rejectattr('validation_summary.is_valid', 'equalto', true)|list|length }}</div>
-            <div class="stat-label">Issues Found</div>
-        </div>
-
-        <div class="stat-card hover-lift">
-            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color);">
-                <i class="fas fa-file-slash"></i>
-            </div>
-            <div class="stat-value">{{ orders_data.orders|rejectattr('has_grn')|list|length }}</div>
-            <div class="stat-label">No GRN</div>
-        </div>
-    {% endif %}
+            {% endfor %}
+        {% else %}
+            <!-- Default status cards when no data is available -->
+            {% for status_info in [
+                ('completed', 'COMPLETED', 'check-circle', '#e8f5e8', '#28a745'),
+                ('executing', 'EXECUTING', 'truck', '#e3f2fd', '#007bff'),
+                ('cancelled', 'CANCELLED', 'times-circle', '#ffebee', '#dc3545'),
+                ('waiting', 'WAITING', 'clock', '#fff3cd', '#ffc107')
+            ] %}
+                <div class="stat-card hover-lift clickable-stat-card"
+                     data-status="{{ status_info[0] }}"
+                     data-count="0"
+                     onclick="quickFilterStatus('{{ status_info[0] }}')">
+                    <div class="stat-icon" style="background: {{ status_info[3] }}; color: {{ status_info[4] }};">
+                        <i class="fas fa-{{ status_info[2] }}"></i>
+                    </div>
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">
+                        {{ status_info[1]|title }}
+                        <div class="status-filter-indicator" id="filter-indicator-{{ status_info[0] }}" style="display: none;"></div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
 </div>
-{% endif %}
 
 <!-- Unified Smart Filters Panel -->
 <div class="row mb-4">
@@ -160,21 +174,19 @@
                                 </div>
                             </div>
 
-                            <!-- Order Status -->
-                            <div class="mb-3">
-                                <label class="form-label">Order Status</label>
-                                <select class="form-select" id="filter-order-status" name="order_status">
-                                    <option value="">All Statuses</option>
-                                    <option value="COMPLETED">Completed</option>
-                                    <option value="EXECUTING">Executing</option>
-                                    <option value="CANCELLED">Cancelled</option>
-                                    <option value="ASSIGNED">Assigned</option>
-                                    <option value="OPEN">Open</option>
-                                    <option value="PARKED">Parked</option>
-                                    <option value="PLANNING">Planning</option>
-                                    <option value="PLANNED">Planned</option>
-                                </select>
-                            </div>
+                            <!-- Hidden Order Status Select for JavaScript compatibility -->
+                            <select id="filter-order-status" name="order_status" style="display: none;">
+                                <option value="">All Statuses</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="EXECUTING">Executing</option>
+                                <option value="CANCELLED">Cancelled</option>
+                                <option value="WAITING">Waiting</option>
+                                <option value="ASSIGNED">Assigned</option>
+                                <option value="OPEN">Open</option>
+                                <option value="PARKED">Parked</option>
+                                <option value="PLANNING">Planning</option>
+                                <option value="PLANNED">Planned</option>
+                            </select>
 
                             <!-- Validation Status -->
                             <div class="mb-3">
@@ -186,6 +198,7 @@
                                     <option value="valid">Valid Only</option>
                                     <option value="invalid">Invalid Only</option>
                                     <option value="no_document">No Document Detected</option>
+                                    <option value="no_grn">No GRN Available</option>
                                 </select>
                             </div>
                         </div>
@@ -642,7 +655,90 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <script>
-// Function to change order status filter
+// Quick filter functionality for status totals bar
+function quickFilterStatus(status) {
+    console.log('Quick filtering by status:', status);
+
+    // Show loading state
+    showFilteringState();
+
+    // Update the enhanced filters system
+    if (typeof enhancedFilters !== 'undefined' && enhancedFilters) {
+        // Set the order status filter
+        const statusSelect = document.getElementById('filter-order-status');
+        if (statusSelect) {
+            statusSelect.value = status === 'all' ? '' : status.toUpperCase();
+        }
+
+        // Apply filters through the enhanced filters system
+        enhancedFilters.applyFilters();
+
+        // Update visual indicators
+        updateStatusFilterIndicators(status);
+    } else {
+        // Fallback: use URL navigation
+        const selectedDate = '{{ selected_date }}';
+        const url = new URL(window.location.href);
+        url.searchParams.set('order_status', status === 'all' ? 'all' : status);
+        url.searchParams.set('date', selectedDate);
+        window.location.href = url.toString();
+    }
+}
+
+function showFilteringState() {
+    // Add visual feedback for filtering
+    const indicator = document.getElementById('filtered-indicator');
+    if (indicator) {
+        indicator.style.display = 'inline';
+        indicator.innerHTML = '<i class="fas fa-spinner fa-spin text-warning"></i> Filtering...';
+    }
+}
+
+function updateStatusFilterIndicators(activeStatus) {
+    // Clear all indicators first
+    document.querySelectorAll('.status-filter-indicator').forEach(indicator => {
+        indicator.style.display = 'none';
+    });
+
+    // Clear all active classes
+    document.querySelectorAll('.clickable-stat-card').forEach(card => {
+        card.classList.remove('active-filter');
+    });
+
+    // Set active state for selected status
+    if (activeStatus && activeStatus !== 'all') {
+        const activeCard = document.querySelector(`[data-status="${activeStatus.toLowerCase()}"]`);
+        const activeIndicator = document.getElementById(`filter-indicator-${activeStatus.toLowerCase()}`);
+
+        if (activeCard) {
+            activeCard.classList.add('active-filter');
+        }
+        if (activeIndicator) {
+            activeIndicator.style.display = 'block';
+        }
+
+        // Show filtered indicator
+        const filteredIndicator = document.getElementById('filtered-indicator');
+        if (filteredIndicator) {
+            filteredIndicator.style.display = 'inline';
+            filteredIndicator.innerHTML = '<i class="fas fa-filter text-warning"></i> Filtered';
+        }
+    } else {
+        // Show "All" as active
+        const allCard = document.querySelector('[data-status="all"]');
+        if (allCard) {
+            allCard.classList.add('active-filter');
+        }
+
+        // Hide filtered indicator
+        const filteredIndicator = document.getElementById('filtered-indicator');
+        if (filteredIndicator) {
+            filteredIndicator.style.display = 'none';
+        }
+    }
+}
+
+// Function to change order status filter (legacy compatibility)
 function changeOrderStatus() {
     const orderStatusSelect = document.getElementById('orderStatusFilter');
     const selectedStatus = orderStatusSelect.value;
@@ -923,6 +1019,88 @@ async function validateAllOrders() {
     }
 }
 
+// Initialize status filter indicators on page load
+function initializeStatusFilterIndicators() {
+    // Get current filter state from URL or template
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentStatus = urlParams.get('order_status') || '{{ selected_order_status }}' || 'all';
+
+    console.log('Initializing with current status:', currentStatus);
+
+    // Update indicators based on current state
+    updateStatusFilterIndicators(currentStatus.toLowerCase());
+}
+
+// Add interactive features to status cards
+function initializeStatusCardInteractions() {
+    document.querySelectorAll('.clickable-stat-card').forEach(card => {
+        const status = card.dataset.status;
+        const count = card.dataset.count;
+
+        // Add tooltip
+        card.title = `Click to filter by ${status.toUpperCase()} status (${count} orders)`;
+
+        // Add keyboard support
+        card.setAttribute('tabindex', '0');
+        card.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                quickFilterStatus(status);
+            }
+        });
+
+        // Add visual feedback
+        card.addEventListener('mouseenter', function() {
+            if (!this.classList.contains('active-filter')) {
+                this.style.transform = 'translateY(-4px) scale(1.02)';
+            }
+        });
+
+        card.addEventListener('mouseleave', function() {
+            if (!this.classList.contains('active-filter')) {
+                this.style.transform = '';
+            }
+        });
+    });
+}
+
+// Update totals bar with filtered results
+function updateTotalsBarWithFilteredData(filteredData) {
+    if (!filteredData || !filteredData.orders) return;
+
+    // Update total count
+    const totalCard = document.querySelector('[data-status="all"] .stat-value');
+    if (totalCard) {
+        totalCard.textContent = filteredData.orders.length;
+        document.querySelector('[data-status="all"]').dataset.count = filteredData.orders.length;
+    }
+
+    // Update status-specific counts
+    if (filteredData.statusTotals) {
+        Object.entries(filteredData.statusTotals).forEach(([status, count]) => {
+            const statusCard = document.querySelector(`[data-status="${status.toLowerCase()}"] .stat-value`);
+            if (statusCard) {
+                statusCard.textContent = count;
+                document.querySelector(`[data-status="${status.toLowerCase()}"]`).dataset.count = count;
+            }
+        });
+
+        // Hide cards with 0 count or show them dimmed
+        document.querySelectorAll('.clickable-stat-card:not([data-status="all"])').forEach(card => {
+            const status = card.dataset.status.toUpperCase();
+            const count = filteredData.statusTotals[status] || 0;
+
+            if (count === 0) {
+                card.style.opacity = '0.4';
+                card.style.pointerEvents = 'none';
+            } else {
+                card.style.opacity = '';
+                card.style.pointerEvents = '';
+            }
+        });
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
     // Individual validation buttons
@@ -951,6 +1129,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize order search functionality
     setupOrderSearch();
+
+    // Initialize status filter indicators based on current URL parameters
+    initializeStatusFilterIndicators();
+
+    // Add hover effects and tooltips to status cards
+    initializeStatusCardInteractions();
 });
 
 // Auto-refresh disabled - users can manually refresh when needed
