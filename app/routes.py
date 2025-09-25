@@ -11,6 +11,7 @@ from models import ValidationResult
 from app.auth import LocusAuth
 from app.validators import GoogleAIValidator
 from app.utils import rate_limit_api_call, api_rate_limiter
+from app.filters import filter_service
 
 logger = logging.getLogger(__name__)
 
@@ -906,4 +907,184 @@ def register_routes(app, config):
             return jsonify({
                 'success': False,
                 'error': str(e)
+            }), 500
+
+    # Enhanced Filtering API Endpoints
+    @app.route('/api/filters/available', methods=['GET'])
+    def api_get_available_filters():
+        """Get all available filter options"""
+        try:
+            filters = filter_service.get_available_filters()
+            return jsonify({
+                'success': True,
+                'filters': filters,
+                'message': 'Available filters retrieved successfully'
+            }), 200
+        except Exception as e:
+            logger.error(f"Error getting available filters: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
+    @app.route('/api/orders/filter', methods=['POST'])
+    def api_filter_orders():
+        """Main filtering endpoint - returns filtered orders based on criteria"""
+        try:
+            # Get filter criteria from request
+            filters_data = request.get_json() or {}
+
+            # Log the filter request for debugging
+            logger.info(f"Filter request: {filters_data}")
+
+            # Apply filters using the filter service
+            result = filter_service.apply_filters(filters_data)
+
+            if not result.get('success', False):
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Unknown filtering error'),
+                    'orders': [],
+                    'total_count': 0
+                }), 400
+
+            # Enhance orders with validation summaries and GRN status
+            enhanced_orders = []
+            for order in result['orders']:
+                # Add validation summary
+                validation_summary = ai_validator.get_stored_validation_result(order['id'])
+                if validation_summary:
+                    order['validation_summary'] = {
+                        'has_validation': True,
+                        'is_valid': validation_summary.get('is_valid', False),
+                        'has_document': validation_summary.get('has_document'),
+                        'confidence_score': validation_summary.get('confidence_score', 0),
+                        'discrepancies_count': len(validation_summary.get('discrepancies', [])),
+                        'validation_date': validation_summary.get('validation_date'),
+                        'processing_time': validation_summary.get('processing_time'),
+                        'summary': validation_summary.get('summary', {}),
+                        'gtins_verified': validation_summary.get('summary', {}).get('gtins_verified', 0),
+                        'gtins_matched': validation_summary.get('summary', {}).get('gtins_matched', 0)
+                    }
+                else:
+                    order['validation_summary'] = {
+                        'has_validation': False,
+                        'is_valid': False
+                    }
+
+                # Check GRN status (this requires the order detail data)
+                # For now, we'll set a placeholder - in production, you might want to store this in DB
+                order['has_grn'] = True  # Placeholder - would need to check actual order data
+
+                enhanced_orders.append(order)
+
+            result['orders'] = enhanced_orders
+
+            return jsonify({
+                'success': True,
+                'orders': result['orders'],
+                'total_count': result['total_count'],
+                'page': result.get('page', 1),
+                'per_page': result.get('per_page', 50),
+                'total_pages': result.get('total_pages', 1),
+                'status_totals': result.get('status_totals', {}),
+                'applied_filters': result.get('applied_filters', {}),
+                'message': f'Found {len(result["orders"])} orders matching filters'
+            }), 200
+
+        except Exception as e:
+            logger.error(f"Error filtering orders: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'orders': [],
+                'total_count': 0
+            }), 500
+
+    @app.route('/api/filters/options/<filter_type>', methods=['GET'])
+    def api_get_filter_options(filter_type):
+        """Get dynamic options for a specific filter type with search support"""
+        try:
+            # Validate filter type
+            valid_filters = ['order_status', 'location_city', 'location_country_code',
+                           'rider_name', 'client_id']
+
+            if filter_type not in valid_filters:
+                return jsonify({
+                    'success': False,
+                    'error': f'Invalid filter type: {filter_type}',
+                    'options': []
+                }), 400
+
+            # Get search term and pagination parameters
+            search_term = request.args.get('search', '').strip()
+            page = int(request.args.get('page', 1))
+            per_page = min(int(request.args.get('per_page', 50)), 100)  # Max 100 items
+
+            # Get options based on filter type with search
+            options = []
+
+            if filter_type == 'location_city':
+                from models import db, Order
+                query = db.session.query(Order.location_city.distinct().label('value')).filter(
+                    Order.location_city.isnot(None)
+                )
+                if search_term:
+                    query = query.filter(Order.location_city.ilike(f'%{search_term}%'))
+
+                results = query.order_by('value').offset((page - 1) * per_page).limit(per_page).all()
+                options = [{'value': r.value, 'label': r.value} for r in results if r.value]
+
+            elif filter_type == 'rider_name':
+                from models import db, Order
+                query = db.session.query(Order.rider_name.distinct().label('value')).filter(
+                    Order.rider_name.isnot(None)
+                )
+                if search_term:
+                    query = query.filter(Order.rider_name.ilike(f'%{search_term}%'))
+
+                results = query.order_by('value').offset((page - 1) * per_page).limit(per_page).all()
+                options = [{'value': r.value, 'label': r.value} for r in results if r.value]
+
+            elif filter_type == 'client_id':
+                from models import db, Order
+                query = db.session.query(Order.client_id.distinct().label('value')).filter(
+                    Order.client_id.isnot(None)
+                )
+                if search_term:
+                    query = query.filter(Order.client_id.ilike(f'%{search_term}%'))
+
+                results = query.order_by('value').offset((page - 1) * per_page).limit(per_page).all()
+                options = [{'value': r.value, 'label': r.value} for r in results if r.value]
+
+            else:
+                # For static options like order_status
+                all_filters = filter_service.get_available_filters()
+                for category in all_filters.values():
+                    if filter_type in category:
+                        all_options = category[filter_type].get('options', [])
+                        if search_term:
+                            options = [opt for opt in all_options if search_term.lower() in opt['label'].lower()]
+                        else:
+                            options = all_options
+                        break
+
+            return jsonify({
+                'success': True,
+                'filter_type': filter_type,
+                'options': options,
+                'count': len(options),
+                'search_term': search_term,
+                'page': page,
+                'per_page': per_page
+            }), 200
+
+        except Exception as e:
+            logger.error(f"Error getting filter options for {filter_type}: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return jsonify({
+                'success': False,
+                'error': str(e),
+                'options': []
             }), 500

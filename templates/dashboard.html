@@ -111,148 +111,203 @@
 </div>
 {% endif %}
 
-<!-- Improved Horizontal Filters Panel -->
+<!-- Unified Smart Filters Panel -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="filters-panel horizontal-filters">
-            <div class="filters-header">
+        <div class="filters-panel">
+            <div class="filters-header d-flex justify-content-between align-items-center">
                 <h6 class="mb-0">
-                    <i class="fas fa-filter me-2"></i>
-                    Filters & Actions
+                    <i class="fas fa-search me-2"></i>
+                    Order Filters
                 </h6>
+                <button class="btn btn-sm btn-outline-primary" type="button" id="filters-toggle">
+                    <i class="fas fa-chevron-down" id="filters-chevron"></i>
+                    <span class="ms-1" id="filters-toggle-text">Show Filters</span>
+                </button>
             </div>
 
-            <div class="filters-body horizontal-layout">
-                <!-- Date Filter -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-calendar-alt me-1"></i>
-                        Date
-                    </label>
-                    <form method="GET" class="filter-control" id="date-form">
-                        <input type="hidden" name="order_status" value="{{ selected_order_status }}">
-                        <div class="input-group input-group-sm">
-                            <input type="date" name="date" value="{{ selected_date }}" class="form-control">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-search"></i>
-                            </button>
-                        </div>
-                    </form>
-                </div>
+            <!-- Filters Content -->
+            <div id="filters-content" style="display: none;" class="filters-body">
+                <div class="row g-4">
+                    <!-- Basic Filters -->
+                    <div class="col-lg-6">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-calendar-alt me-2"></i>Date & Status
+                            </h6>
 
-                <!-- Order Status Filter -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-list-ul me-1"></i>
-                        Order Status
-                    </label>
-                    <div class="filter-control">
-                        <select id="orderStatusFilter" class="form-select form-select-sm" onchange="changeOrderStatus()">
-                            <option value="all" {{ 'selected' if selected_order_status == 'all' else '' }}>🔄 All Orders</option>
-                            <option value="completed" {{ 'selected' if selected_order_status == 'completed' else '' }}>✅ Completed</option>
-                            <option value="executing" {{ 'selected' if selected_order_status == 'executing' else '' }}>⚡ Executing</option>
-                            <option value="cancelled" {{ 'selected' if selected_order_status == 'cancelled' else '' }}>❌ Cancelled</option>
-                            <option value="assigned" {{ 'selected' if selected_order_status == 'assigned' else '' }}>📋 Assigned</option>
-                            <option value="open" {{ 'selected' if selected_order_status == 'open' else '' }}>🔓 Open</option>
-                            <option value="parked" {{ 'selected' if selected_order_status == 'parked' else '' }}>⏸️ Parked</option>
-                            <option value="planning" {{ 'selected' if selected_order_status == 'planning' else '' }}>📝 Planning</option>
-                            <option value="planned" {{ 'selected' if selected_order_status == 'planned' else '' }}>📊 Planned</option>
-                        </select>
-                    </div>
-                </div>
+                            <!-- Date Range -->
+                            <div class="mb-3">
+                                <label class="form-label">Date Range</label>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <input type="date" class="form-control" id="filter-date-from" name="date_from"
+                                               value="{{ selected_date }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="date" class="form-control" id="filter-date-to" name="date_to">
+                                    </div>
+                                </div>
+                            </div>
 
-                <!-- Search -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-search me-1"></i>
-                        Search
-                    </label>
-                    <div class="filter-control">
-                        <div class="input-group input-group-sm">
-                            <input type="text" id="orderSearch" placeholder="Search Order ID..." class="form-control">
-                            <button type="button" class="btn btn-outline-secondary" onclick="clearSearch()">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                            <!-- Order Status -->
+                            <div class="mb-3">
+                                <label class="form-label">Order Status</label>
+                                <select class="form-select" id="filter-order-status" name="order_status">
+                                    <option value="">All Statuses</option>
+                                    <option value="COMPLETED">Completed</option>
+                                    <option value="EXECUTING">Executing</option>
+                                    <option value="CANCELLED">Cancelled</option>
+                                    <option value="ASSIGNED">Assigned</option>
+                                    <option value="OPEN">Open</option>
+                                    <option value="PARKED">Parked</option>
+                                    <option value="PLANNING">Planning</option>
+                                    <option value="PLANNED">Planned</option>
+                                </select>
+                            </div>
 
-                <!-- Validation Status Filter -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-filter me-1"></i>
-                        Validation Status
-                    </label>
-                    <div class="filter-control">
-                        <select id="issueFilter" class="form-select form-select-sm" onchange="filterByIssues()">
-                            <option value="all">All Orders</option>
-                            <option value="no-grn">No GRN Available</option>
-                            <option value="no-validation">Not Validated</option>
-                            <option value="valid">Valid Orders</option>
-                            <option value="invalid">Invalid Orders</option>
-                            <option value="no-document">No Document</option>
-                            <option value="missing-items">Missing Items</option>
-                            <option value="extra-items">Extra Items</option>
-                            <option value="quantity-issues">Quantity Issues</option>
-                            <option value="gtin-issues">GTIN Issues</option>
-                        </select>
-                    </div>
-                </div>
-
-                {% if orders_data and orders_data.orders %}
-                <!-- Actions -->
-                <div class="filter-group">
-                    <label class="filter-label">
-                        <i class="fas fa-cogs me-1"></i>
-                        Actions
-                    </label>
-                    <div class="filter-control">
-                        <div class="btn-group-sm d-flex gap-1">
-                            {% if selected_order_status == 'all' or selected_order_status == 'completed' %}
-                                <button class="btn btn-warning" id="validate-all-btn">
-                                    <i class="fas fa-tasks me-1"></i>
-                                    Validate All
-                                </button>
-                            {% else %}
-                                <button class="btn btn-outline-warning" id="validate-all-btn" disabled title="Batch validation only available for completed orders">
-                                    <i class="fas fa-lock me-1"></i>
-                                    Validate All (Completed Only)
-                                </button>
-                            {% endif %}
-                            <button type="button" class="btn btn-outline-primary" onclick="location.reload()">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
+                            <!-- Validation Status -->
+                            <div class="mb-3">
+                                <label class="form-label">Validation Status</label>
+                                <select class="form-select" id="filter-validation-status" name="has_validation">
+                                    <option value="">All Orders</option>
+                                    <option value="validated">Has Validation</option>
+                                    <option value="unvalidated">Not Validated</option>
+                                    <option value="valid">Valid Only</option>
+                                    <option value="invalid">Invalid Only</option>
+                                    <option value="no_document">No Document Detected</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Location & Delivery Filters -->
+                    <div class="col-lg-6">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-map-marker-alt me-2"></i>Location & Delivery
+                            </h6>
+
+                            <!-- City -->
+                            <div class="mb-3">
+                                <label class="form-label">City</label>
+                                <select class="form-select" id="filter-city" name="location_city">
+                                    <option value="">All Cities</option>
+                                    <!-- Options loaded dynamically -->
+                                </select>
+                            </div>
+
+                            <!-- Location Name -->
+                            <div class="mb-3">
+                                <label class="form-label">Location Name</label>
+                                <input type="text" class="form-control" id="filter-location-name"
+                                       name="location_name" placeholder="Search location...">
+                            </div>
+
+                            <!-- Rider -->
+                            <div class="mb-3">
+                                <label class="form-label">Rider</label>
+                                <select class="form-select" id="filter-rider" name="rider_name">
+                                    <option value="">All Riders</option>
+                                    <!-- Options loaded dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search & Advanced -->
+                    <div class="col-12">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-search me-2"></i>Search & Advanced
+                            </h6>
+
+                            <div class="row g-3">
+                                <!-- Global Search -->
+                                <div class="col-md-6">
+                                    <label class="form-label">Search Orders</label>
+                                    <input type="text" class="form-control" id="filter-search"
+                                           name="search" placeholder="Search Order ID, Location, Rider...">
+                                </div>
+
+                                <!-- Client ID -->
+                                <div class="col-md-3">
+                                    <label class="form-label">Client ID</label>
+                                    <select class="form-select" id="filter-client" name="client_id">
+                                        <option value="">All Clients</option>
+                                        <!-- Options loaded dynamically -->
+                                    </select>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                {% endif %}
+            </div>
+
+            <!-- Filter Actions -->
+            <div class="filters-actions" id="filter-actions" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" id="apply-filters-btn">
+                            <i class="fas fa-search me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" id="clear-filters-btn">
+                            <i class="fas fa-times me-1"></i>
+                            Clear All
+                        </button>
+                        <button class="btn btn-outline-info" id="load-today-btn">
+                            <i class="fas fa-calendar-day me-1"></i>
+                            Today's Orders
+                        </button>
+                    </div>
+
+                    <!-- Validate All Button (Relocated) -->
+                    <div class="validate-actions">
+                        <button class="btn btn-warning" id="validate-all-btn" style="display: none;">
+                            <i class="fas fa-tasks me-1"></i>
+                            Validate All
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <!-- Filter Messages Container -->
+        <div id="filter-messages" class="mt-3"></div>
     </div>
 </div>
 
-{% if orders_data and orders_data.orders %}
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                Found <strong>{{ orders_data.orders|length }}</strong>
-                {% if selected_order_status == 'all' %}orders{% else %}{{ selected_order_status|title }} orders{% endif %}
-                for {{ selected_date }}
-                {% if orders_data.statusTotals and orders_data.statusTotals|length > 1 %}
-                    <div class="mt-2 small">
-                        <strong>Status breakdown:</strong>
-                        {% for status, count in orders_data.statusTotals.items() %}
-                            <span class="badge bg-secondary me-1">{{ status }}: {{ count }}</span>
-                        {% endfor %}
-                    </div>
-                {% endif %}
+<!-- Results Summary Container -->
+<div id="results-summary">
+    {% if orders_data and orders_data.orders %}
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Found <strong>{{ orders_data.orders|length }}</strong>
+                    {% if selected_order_status == 'all' %}orders{% else %}{{ selected_order_status|title }} orders{% endif %}
+                    for {{ selected_date }}
+                    {% if orders_data.statusTotals and orders_data.statusTotals|length > 1 %}
+                        <div class="mt-2 small">
+                            <strong>Status breakdown:</strong>
+                            {% for status, count in orders_data.statusTotals.items() %}
+                                <span class="badge bg-secondary me-1">{{ status }}: {{ count }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
-    </div>
+    {% endif %}
+</div>
 
-    <!-- Orders Grid with Enhanced Layout -->
-    <div class="orders-grid">
+<!-- Orders Container -->
+<div id="orders-container">
+    {% if orders_data and orders_data.orders %}
+        <!-- Orders Grid with Enhanced Layout -->
+        <div class="orders-grid">
         {% for order in orders_data.orders %}
             <div class="order-card clickable-card hover-glow slide-in-left" onclick="viewOrderDetail('{{ order.id if order.id else loop.index0 }}', '{{ selected_date }}')" style="animation-delay: {{ (loop.index0 * 0.1)|round(1) }}s">
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -523,9 +578,45 @@
         </button>
     </div>
 {% endif %}
+</div>
+
+<!-- Pagination and Per-Page Controls -->
+<div id="pagination-section" class="pagination-section mt-4">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <!-- Per-Page Control -->
+            <div class="d-flex align-items-center">
+                <label for="filter-per-page" class="form-label me-2 mb-0">Show:</label>
+                <select class="form-select form-select-sm" id="filter-per-page" name="per_page" style="width: auto;">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                </select>
+                <span class="ms-2 text-muted">results per page</span>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <!-- Pagination Container -->
+            <div id="pagination-container" class="pagination-container"></div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<!-- Enhanced Filters JavaScript -->
+<script src="{{ url_for('static', filename='js/enhanced-filters.js') }}"></script>
+
+<!-- Unified Filters Initialization -->
+<script>
+// Initialize the unified filter system
+document.addEventListener('DOMContentLoaded', function() {
+    // The EnhancedFilters class handles all initialization
+    console.log('Enhanced filters system initialized');
+});
+</script>
+
 <script>
 // Function to change order status filter
 function changeOrderStatus() {
