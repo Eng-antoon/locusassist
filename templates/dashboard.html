@@ -328,9 +328,15 @@
                 <div class="card-body order-card-content">
                     <!-- Status Badges -->
                     <div class="d-flex flex-wrap gap-2 mb-3">
-                        <span class="status-indicator success">
-                            {{ order.orderStatus }}
+                        <span class="status-indicator {{ 'danger' if (order.effective_status or order.orderStatus) == 'CANCELLED' else 'success' if (order.effective_status or order.orderStatus) == 'COMPLETED' else 'warning' if (order.effective_status or order.orderStatus) in ['EXECUTING', 'ONGOING'] else 'secondary' }}">
+                            {{ order.effective_status or order.orderStatus }}
                         </span>
+
+                        {% if order.cancellation_reason %}
+                            <span class="status-indicator danger small" title="Cancellation Reason">
+                                <i class="fas fa-times-circle"></i> {{ order.cancellation_reason }}
+                            </span>
+                        {% endif %}
 
                         {% if not order.has_grn %}
                             <span class="status-indicator danger" title="No GRN document available for this order">
@@ -505,7 +511,7 @@
                     </div>
 
                     <div class="action-buttons">
-                        {% if order.orderStatus == 'COMPLETED' %}
+                        {% if (order.effective_status or order.orderStatus) == 'COMPLETED' %}
                             {% if order.has_grn %}
                                 {% if order.validation_summary and order.validation_summary.has_validation %}
                                     <button class="btn btn-sm btn-warning btn-icon hover-lift reprocess-order-btn"

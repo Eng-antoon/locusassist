@@ -19,14 +19,27 @@ class Order(db.Model):
     location_country_code = db.Column(db.String(10))
 
     # Tour/Delivery data
+    tour_id = db.Column(db.String(255), index=True)  # Full tour ID from API
+    tour_date = db.Column(db.String(20))  # Parsed date from tour ID
+    tour_plan_id = db.Column(db.String(100))  # Parsed plan ID from tour ID
+    tour_name = db.Column(db.String(50))  # Parsed tour name from tour ID
+    tour_number = db.Column(db.Integer)  # Extracted number from tour name for sorting
     rider_name = db.Column(db.String(255))
     vehicle_registration = db.Column(db.String(100))
 
     # Completion data
     completed_on = db.Column(db.DateTime)
 
+    # Live update data from task-search endpoint
+    effective_status = db.Column(db.String(50))  # Real-time status from live updates
+    status_updates = db.Column(db.Text)  # JSON string of status history
+    cancellation_reason = db.Column(db.String(500))  # Cancellation reason if cancelled
+    last_status_update = db.Column(db.DateTime)  # Timestamp of last status change
+    status_actor = db.Column(db.String(255))  # Who made the last status change
+
     # Raw order data from Locus API
     raw_data = db.Column(db.Text)  # JSON string
+    live_update_data = db.Column(db.Text)  # JSON string from live updates endpoint
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -45,14 +58,25 @@ class Order(db.Model):
             'client_id': self.client_id,
             'date': self.date.isoformat() if self.date else None,
             'order_status': self.order_status,
+            'effective_status': self.effective_status,
+            'status_updates': json.loads(self.status_updates) if self.status_updates else None,
+            'cancellation_reason': self.cancellation_reason,
+            'last_status_update': self.last_status_update.isoformat() if self.last_status_update else None,
+            'status_actor': self.status_actor,
             'location_name': self.location_name,
             'location_address': self.location_address,
             'location_city': self.location_city,
             'location_country_code': self.location_country_code,
+            'tour_id': self.tour_id,
+            'tour_date': self.tour_date,
+            'tour_plan_id': self.tour_plan_id,
+            'tour_name': self.tour_name,
+            'tour_number': self.tour_number,
             'rider_name': self.rider_name,
             'vehicle_registration': self.vehicle_registration,
             'completed_on': self.completed_on.isoformat() if self.completed_on else None,
             'raw_data': json.loads(self.raw_data) if self.raw_data else None,
+            'live_update_data': json.loads(self.live_update_data) if self.live_update_data else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -183,3 +207,83 @@ class DashboardStats(db.Model):
             'avg_processing_time': self.avg_processing_time,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None
         }
+
+class Tour(db.Model):
+    __tablename__ = 'tours'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tour_id = db.Column(db.String(255), unique=True, nullable=False, index=True)  # Full tour ID
+    tour_date = db.Column(db.String(20), nullable=False, index=True)  # Parsed date from tour ID
+    tour_plan_id = db.Column(db.String(100), nullable=False, index=True)  # Parsed plan ID
+    tour_name = db.Column(db.String(50), nullable=False)  # Parsed tour name
+    tour_number = db.Column(db.Integer, nullable=False, index=True)  # Extracted number for sorting
+
+    # Tour metadata
+    rider_name = db.Column(db.String(255))
+    vehicle_registration = db.Column(db.String(100))
+    tour_start_time = db.Column(db.DateTime)
+    tour_end_time = db.Column(db.DateTime)
+
+    # Statistics
+    total_orders = db.Column(db.Integer, default=0)
+    completed_orders = db.Column(db.Integer, default=0)
+    pending_orders = db.Column(db.Integer, default=0)
+
+    # Location summary
+    delivery_cities = db.Column(db.Text)  # JSON array of cities
+    delivery_areas = db.Column(db.Text)  # JSON array of areas/locations
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return f'<Tour {self.tour_id}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tour_id': self.tour_id,
+            'tour_date': self.tour_date,
+            'tour_plan_id': self.tour_plan_id,
+            'tour_name': self.tour_name,
+            'tour_number': self.tour_number,
+            'rider_name': self.rider_name,
+            'vehicle_registration': self.vehicle_registration,
+            'tour_start_time': self.tour_start_time.isoformat() if self.tour_start_time else None,
+            'tour_end_time': self.tour_end_time.isoformat() if self.tour_end_time else None,
+            'total_orders': self.total_orders,
+            'completed_orders': self.completed_orders,
+            'pending_orders': self.pending_orders,
+            'delivery_cities': json.loads(self.delivery_cities) if self.delivery_cities else [],
+            'delivery_areas': json.loads(self.delivery_areas) if self.delivery_areas else [],
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    @staticmethod
+    def parse_tour_id(tour_id):
+        """Parse a tour ID like '2024-09-23-21-15-02*a80a216bd3f74818a5eab97046270932*tour-79'"""
+        if not tour_id:
+            return None, None, None, None
+
+        try:
+            parts = tour_id.split('*')
+            if len(parts) != 3:
+                return None, None, None, None
+
+            tour_date = parts[0]  # '2024-09-23-21-15-02'
+            plan_id = parts[1]    # 'a80a216bd3f74818a5eab97046270932'
+            tour_name = parts[2]  # 'tour-79'
+
+            # Extract tour number for sorting
+            tour_number = None
+            if tour_name.startswith('tour-'):
+                try:
+                    tour_number = int(tour_name.split('-')[1])
+                except (IndexError, ValueError):
+                    tour_number = 0
+
+            return tour_date, plan_id, tour_name, tour_number
+        except Exception:
+            return None, None, None, None

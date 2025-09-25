@@ -1088,3 +1088,125 @@ def register_routes(app, config):
                 'error': str(e),
                 'options': []
             }), 500
+
+    # Tours API Endpoints
+    @app.route('/tours')
+    def tours_dashboard():
+        """Tours dashboard page"""
+        from datetime import datetime, timedelta
+        from models import Tour
+
+        # Get the most recent tour date as default, or yesterday if no tours
+        selected_date = request.args.get('date')
+
+        if not selected_date:
+            # Find the most recent tour date
+            latest_tour = Tour.query.order_by(Tour.tour_date.desc()).first()
+            if latest_tour and latest_tour.tour_date:
+                # Extract date from tour_date (format: 2025-09-24-20-11-06)
+                selected_date = latest_tour.tour_date[:10]
+            else:
+                # Fallback to yesterday (tours are usually planned the day before)
+                yesterday = datetime.now() - timedelta(days=1)
+                selected_date = yesterday.strftime("%Y-%m-%d")
+
+        return render_template('tours.html',
+                             selected_date=selected_date,
+                             username='Amin')
+
+    @app.route('/tour/<tour_id>')
+    def tour_detail(tour_id):
+        """View detailed tour information"""
+        from app.tours import tour_service
+
+        # Decode tour_id if it was URL encoded
+        import urllib.parse
+        tour_id = urllib.parse.unquote(tour_id)
+
+        result = tour_service.get_tour_details(tour_id)
+
+        if not result['success']:
+            flash(f'Tour {tour_id} not found or failed to load', 'error')
+            return redirect(url_for('tours_dashboard'))
+
+        return render_template('tour_detail.html',
+                             tour=result['tour'],
+                             orders=result['orders'],
+                             orders_count=result['orders_count'],
+                             tour_id=tour_id)
+
+    @app.route('/api/tours')
+    def api_tours():
+        """API endpoint to get tours with filtering and pagination"""
+        from app.tours import tour_service
+
+        # Get query parameters
+        date = request.args.get('date')
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 50)), 100)  # Max 100
+        search = request.args.get('search', '').strip()
+        sort_by = request.args.get('sort_by', 'tour_number')
+        sort_order = request.args.get('sort_order', 'asc')
+
+        # Get tours
+        result = tour_service.get_tours(
+            date=date,
+            page=page,
+            per_page=per_page,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+
+        return jsonify(result)
+
+    @app.route('/api/tours/summary')
+    def api_tours_summary():
+        """API endpoint to get tour summary statistics"""
+        from app.tours import tour_service
+
+        date = request.args.get('date')
+        result = tour_service.get_tour_summary_stats(date=date)
+
+        return jsonify(result)
+
+    @app.route('/api/tours/refresh', methods=['POST'])
+    def api_refresh_tours():
+        """API endpoint to refresh tour data from orders"""
+        from app.tours import tour_service
+
+        try:
+            date = request.args.get('date')
+            result = tour_service.refresh_all_tour_data(date=date)
+
+            if result['success']:
+                return jsonify({
+                    'success': True,
+                    'message': result['message'],
+                    'processed_orders': result['processed_orders'],
+                    'updated_tours': result['updated_tours']
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': result.get('error', 'Unknown error')
+                }), 500
+
+        except Exception as e:
+            logger.error(f"Error refreshing tours: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'Error refreshing tours: {str(e)}'
+            }), 500
+
+    @app.route('/api/tour/<tour_id>')
+    def api_tour_detail(tour_id):
+        """API endpoint to get detailed tour information"""
+        from app.tours import tour_service
+
+        # Decode tour_id if it was URL encoded
+        import urllib.parse
+        tour_id = urllib.parse.unquote(tour_id)
+
+        result = tour_service.get_tour_details(tour_id)
+        return jsonify(result)

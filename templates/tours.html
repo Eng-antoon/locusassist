@@ -1,0 +1,690 @@
+{% extends "base.html" %}
+
+{% block title %}Tours Dashboard - Locus Assistant{% endblock %}
+
+{% block content %}
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Modern Header Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h1 class="text-gradient mb-2">
+                    <i class="fas fa-route me-3"></i>Tours Dashboard
+                </h1>
+                <p class="text-muted mb-0">Manage delivery tours and track order groups</p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-end">
+                    <small class="text-muted d-block">Last Updated</small>
+                    <span class="fw-semibold" id="last-updated">--:--:--</span>
+                </div>
+                <button class="btn btn-primary btn-icon hover-lift" onclick="refreshTours()">
+                    <i class="fas fa-sync-alt" id="refresh-icon"></i>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="order-stats-grid mb-4" id="tour-stats-grid">
+    <!-- Statistics cards will be populated by JavaScript -->
+</div>
+
+<!-- Tours Filters Panel -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="filters-panel">
+            <div class="filters-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-search me-2"></i>
+                    Tour Filters
+                </h6>
+                <button class="btn btn-sm btn-outline-primary" type="button" id="filters-toggle">
+                    <i class="fas fa-chevron-down" id="filters-chevron"></i>
+                    <span class="ms-1" id="filters-toggle-text">Show Filters</span>
+                </button>
+            </div>
+
+            <!-- Filters Content -->
+            <div id="filters-content" style="display: none;" class="filters-body">
+                <div class="row g-4">
+                    <!-- Date and Search Filters -->
+                    <div class="col-lg-6">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-calendar-alt me-2"></i>Date & Search
+                            </h6>
+
+                            <!-- Date -->
+                            <div class="mb-3">
+                                <label class="form-label">Date</label>
+                                <input type="date" class="form-control" id="filter-date" name="date"
+                                       value="{{ selected_date }}">
+                            </div>
+
+                            <!-- Search -->
+                            <div class="mb-3">
+                                <label class="form-label">Search Tours</label>
+                                <input type="text" class="form-control" id="filter-search"
+                                       name="search" placeholder="Search Tour ID, Name, Rider...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sorting Options -->
+                    <div class="col-lg-6">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-sort me-2"></i>Sorting
+                            </h6>
+
+                            <!-- Sort By -->
+                            <div class="mb-3">
+                                <label class="form-label">Sort By</label>
+                                <select class="form-select" id="filter-sort-by" name="sort_by">
+                                    <option value="tour_number">Tour Number</option>
+                                    <option value="tour_date">Tour Date</option>
+                                    <option value="total_orders">Total Orders</option>
+                                </select>
+                            </div>
+
+                            <!-- Sort Order -->
+                            <div class="mb-3">
+                                <label class="form-label">Sort Order</label>
+                                <select class="form-select" id="filter-sort-order" name="sort_order">
+                                    <option value="asc">Ascending</option>
+                                    <option value="desc">Descending</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Actions -->
+            <div class="filters-actions" id="filter-actions" style="display: none;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" id="apply-filters-btn">
+                            <i class="fas fa-search me-1"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn btn-outline-secondary" id="clear-filters-btn">
+                            <i class="fas fa-times me-1"></i>
+                            Clear All
+                        </button>
+                        <button class="btn btn-outline-info" id="load-today-btn">
+                            <i class="fas fa-calendar-day me-1"></i>
+                            Today's Tours
+                        </button>
+                    </div>
+
+                    <div class="refresh-actions">
+                        <button class="btn btn-warning" id="refresh-tour-data-btn">
+                            <i class="fas fa-database me-1"></i>
+                            Refresh Tour Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Messages Container -->
+        <div id="filter-messages" class="mt-3"></div>
+    </div>
+</div>
+
+<!-- Results Summary Container -->
+<div id="results-summary" class="mb-3">
+    <!-- Summary will be populated by JavaScript -->
+</div>
+
+<!-- Tours Container -->
+<div id="tours-container">
+    <!-- Tours grid will be populated by JavaScript -->
+</div>
+
+<!-- Pagination Section -->
+<div id="pagination-section" class="pagination-section mt-4">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <!-- Per-Page Control -->
+            <div class="d-flex align-items-center">
+                <label for="filter-per-page" class="form-label me-2 mb-0">Show:</label>
+                <select class="form-select form-select-sm" id="filter-per-page" name="per_page" style="width: auto;">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                </select>
+                <span class="ms-2 text-muted">tours per page</span>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <!-- Pagination Container -->
+            <div id="pagination-container" class="pagination-container"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Tours dashboard state
+let currentPage = 1;
+let currentFilters = {
+    date: '{{ selected_date }}',
+    search: '',
+    sort_by: 'tour_number',
+    sort_order: 'asc',
+    per_page: 50
+};
+
+// Initialize tours dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    initializeFiltersPanel();
+    loadTours();
+    loadTourSummary();
+
+    // Update last updated time
+    updateLastUpdatedTime();
+});
+
+function initializeFiltersPanel() {
+    // Toggle filters panel
+    const filtersToggle = document.getElementById('filters-toggle');
+    const filtersContent = document.getElementById('filters-content');
+    const filterActions = document.getElementById('filter-actions');
+    const chevron = document.getElementById('filters-chevron');
+    const toggleText = document.getElementById('filters-toggle-text');
+
+    filtersToggle.addEventListener('click', function() {
+        const isHidden = filtersContent.style.display === 'none';
+
+        if (isHidden) {
+            filtersContent.style.display = 'block';
+            filterActions.style.display = 'block';
+            chevron.className = 'fas fa-chevron-up';
+            toggleText.textContent = 'Hide Filters';
+        } else {
+            filtersContent.style.display = 'none';
+            filterActions.style.display = 'none';
+            chevron.className = 'fas fa-chevron-down';
+            toggleText.textContent = 'Show Filters';
+        }
+    });
+
+    // Filter form handlers
+    document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
+    document.getElementById('clear-filters-btn').addEventListener('click', clearFilters);
+    document.getElementById('load-today-btn').addEventListener('click', loadTodaysTours);
+    document.getElementById('refresh-tour-data-btn').addEventListener('click', refreshTourData);
+
+    // Per page change handler
+    document.getElementById('filter-per-page').addEventListener('change', function() {
+        currentFilters.per_page = parseInt(this.value);
+        currentPage = 1;
+        loadTours();
+    });
+}
+
+function applyFilters() {
+    // Get filter values
+    currentFilters.date = document.getElementById('filter-date').value;
+    currentFilters.search = document.getElementById('filter-search').value.trim();
+    currentFilters.sort_by = document.getElementById('filter-sort-by').value;
+    currentFilters.sort_order = document.getElementById('filter-sort-order').value;
+
+    // Reset to first page
+    currentPage = 1;
+
+    // Load tours with new filters
+    loadTours();
+    loadTourSummary();
+}
+
+function clearFilters() {
+    // Reset filter form
+    document.getElementById('filter-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-sort-by').value = 'tour_number';
+    document.getElementById('filter-sort-order').value = 'asc';
+
+    // Apply cleared filters
+    applyFilters();
+}
+
+function loadTodaysTours() {
+    document.getElementById('filter-date').value = new Date().toISOString().split('T')[0];
+    applyFilters();
+}
+
+async function loadTours() {
+    try {
+        showLoading();
+
+        // Build query parameters
+        const params = new URLSearchParams({
+            page: currentPage,
+            per_page: currentFilters.per_page,
+            sort_by: currentFilters.sort_by,
+            sort_order: currentFilters.sort_order
+        });
+
+        if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+        if (currentFilters.search) {
+            params.append('search', currentFilters.search);
+        }
+
+        const response = await fetch(`/api/tours?${params}`);
+        const result = await response.json();
+
+        if (result.success) {
+            displayTours(result.tours);
+            displayPagination(result);
+            displayResultsSummary(result);
+        } else {
+            showError('Failed to load tours: ' + (result.error || 'Unknown error'));
+            displayTours([]);
+        }
+
+    } catch (error) {
+        console.error('Error loading tours:', error);
+        showError('Error loading tours. Please try again.');
+        displayTours([]);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadTourSummary() {
+    try {
+        const params = new URLSearchParams();
+        if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+
+        const response = await fetch(`/api/tours/summary?${params}`);
+        const result = await response.json();
+
+        if (result.success) {
+            displayTourStats(result);
+        }
+    } catch (error) {
+        console.error('Error loading tour summary:', error);
+    }
+}
+
+function displayTourStats(stats) {
+    const statsGrid = document.getElementById('tour-stats-grid');
+
+    statsGrid.innerHTML = `
+        <div class="stat-card hover-lift">
+            <div class="stat-icon">
+                <i class="fas fa-route"></i>
+            </div>
+            <div class="stat-value">${stats.total_tours || 0}</div>
+            <div class="stat-label">Total Tours</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+                <i class="fas fa-box"></i>
+            </div>
+            <div class="stat-value">${stats.total_orders || 0}</div>
+            <div class="stat-label">Total Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-value">${stats.completed_orders || 0}</div>
+            <div class="stat-label">Completed Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="stat-value">${stats.pending_orders || 0}</div>
+            <div class="stat-label">Pending Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--primary-color);">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="stat-value">${stats.unique_riders || 0}</div>
+            <div class="stat-label">Unique Riders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(139, 69, 19, 0.1); color: #8b4513;">
+                <i class="fas fa-map-marker-alt"></i>
+            </div>
+            <div class="stat-value">${stats.unique_cities || 0}</div>
+            <div class="stat-label">Delivery Cities</div>
+        </div>
+    `;
+}
+
+function displayTours(tours) {
+    const container = document.getElementById('tours-container');
+
+    if (!tours || tours.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-route"></i>
+                </div>
+                <h3 class="empty-state-title">No Tours Found</h3>
+                <p class="empty-state-description">
+                    No tours found for the selected criteria. Try adjusting your filters or refresh the tour data.
+                </p>
+                <button class="btn btn-primary btn-icon hover-lift mt-3" onclick="refreshTourData()">
+                    <i class="fas fa-sync-alt"></i>
+                    Refresh Tour Data
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="orders-grid">
+            ${tours.map((tour, index) => createTourCard(tour, index)).join('')}
+        </div>
+    `;
+}
+
+function createTourCard(tour, index) {
+    const completionRate = tour.total_orders > 0
+        ? Math.round((tour.completed_orders / tour.total_orders) * 100)
+        : 0;
+
+    const deliveryCities = tour.delivery_cities && tour.delivery_cities.length > 0
+        ? tour.delivery_cities.slice(0, 3).join(', ') + (tour.delivery_cities.length > 3 ? '...' : '')
+        : 'N/A';
+
+    return `
+        <div class="order-card clickable-card hover-glow slide-in-left"
+             onclick="viewTourDetail('${encodeURIComponent(tour.tour_id)}')"
+             style="animation-delay: ${(index * 0.1).toFixed(1)}s">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-route"></i>
+                        <div>
+                            <h6 class="mb-0">${tour.tour_name}</h6>
+                            <small class="opacity-75">Tour #${tour.tour_number}</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-1">
+                    <i class="fas fa-external-link-alt opacity-75" title="Click to view details"></i>
+                </div>
+            </div>
+
+            <div class="card-body order-card-content">
+                <!-- Status Badges -->
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <span class="status-indicator info">
+                        ${tour.total_orders} Orders
+                    </span>
+                    <span class="status-indicator ${completionRate === 100 ? 'success' : 'warning'}">
+                        ${completionRate}% Complete
+                    </span>
+                </div>
+
+                <!-- Tour Info -->
+                <div class="order-meta-section">
+                    <h6><i class="fas fa-info-circle"></i>Tour Information</h6>
+                    <div class="order-info-grid">
+                        <div class="order-info-item">
+                            <span class="order-info-label">Tour ID:</span>
+                            <span class="order-info-value" title="${tour.tour_id}">${tour.tour_id.length > 30 ? tour.tour_id.substring(0, 30) + '...' : tour.tour_id}</span>
+                        </div>
+                        <div class="order-info-item">
+                            <span class="order-info-label">Date:</span>
+                            <span class="order-info-value">${tour.tour_date}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rider & Vehicle Info -->
+                <div class="order-meta-section">
+                    <h6><i class="fas fa-truck"></i>Delivery Info</h6>
+                    <div class="order-info-grid">
+                        <div class="order-info-item">
+                            <span class="order-info-label">Rider:</span>
+                            <span class="order-info-value">${tour.rider_name || 'N/A'}</span>
+                        </div>
+                        <div class="order-info-item">
+                            <span class="order-info-label">Vehicle:</span>
+                            <span class="order-info-value">${tour.vehicle_registration || 'N/A'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Location Info -->
+                <div class="order-meta-section">
+                    <h6><i class="fas fa-map-marker-alt"></i>Delivery Areas</h6>
+                    <div class="order-info-grid">
+                        <div class="order-info-item">
+                            <span class="order-info-label">Cities:</span>
+                            <span class="order-info-value">${deliveryCities}</span>
+                        </div>
+                        <div class="order-info-item">
+                            <span class="order-info-label">Locations:</span>
+                            <span class="order-info-value">${tour.delivery_areas ? tour.delivery_areas.length : 0} unique</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Order Statistics -->
+                <div class="order-meta-section">
+                    <h6><i class="fas fa-chart-bar"></i>Order Statistics</h6>
+                    <div class="validation-metrics">
+                        <div class="validation-metric">
+                            <div class="validation-metric-value">${tour.total_orders}</div>
+                            <div class="validation-metric-label">Total</div>
+                        </div>
+                        <div class="validation-metric">
+                            <div class="validation-metric-value">${tour.completed_orders}</div>
+                            <div class="validation-metric-label">Completed</div>
+                        </div>
+                        <div class="validation-metric">
+                            <div class="validation-metric-value">${tour.pending_orders}</div>
+                            <div class="validation-metric-label">Pending</div>
+                        </div>
+                        <div class="validation-metric">
+                            <div class="validation-metric-value">${completionRate}%</div>
+                            <div class="validation-metric-label">Progress</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enhanced Card Footer -->
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <div class="action-buttons">
+                    <button class="btn btn-sm btn-outline-primary btn-icon hover-lift"
+                            onclick="event.stopPropagation(); viewTourDetail('${encodeURIComponent(tour.tour_id)}')">
+                        <i class="fas fa-eye"></i>
+                        View Orders
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function displayResultsSummary(result) {
+    const summaryDiv = document.getElementById('results-summary');
+
+    summaryDiv.innerHTML = `
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Found <strong>${result.total_count}</strong> tours
+            ${currentFilters.date ? `for ${currentFilters.date}` : ''}
+            ${currentFilters.search ? ` matching "${currentFilters.search}"` : ''}
+            <div class="mt-2 small">
+                <strong>Page ${result.page} of ${result.total_pages}</strong>
+                (showing ${result.tours.length} tours)
+            </div>
+        </div>
+    `;
+}
+
+function displayPagination(result) {
+    const container = document.getElementById('pagination-container');
+
+    if (result.total_pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let paginationHTML = '<nav><ul class="pagination justify-content-end">';
+
+    // Previous button
+    if (result.has_prev) {
+        paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${result.page - 1})">Previous</a></li>`;
+    }
+
+    // Page numbers
+    const startPage = Math.max(1, result.page - 2);
+    const endPage = Math.min(result.total_pages, result.page + 2);
+
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHTML += `<li class="page-item ${i === result.page ? 'active' : ''}">
+            <a class="page-link" href="#" onclick="changePage(${i})">${i}</a></li>`;
+    }
+
+    // Next button
+    if (result.has_next) {
+        paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${result.page + 1})">Next</a></li>`;
+    }
+
+    paginationHTML += '</ul></nav>';
+    container.innerHTML = paginationHTML;
+}
+
+function changePage(page) {
+    currentPage = page;
+    loadTours();
+}
+
+function viewTourDetail(tourId) {
+    window.location.href = `/tour/${tourId}`;
+}
+
+async function refreshTours() {
+    await loadTours();
+    await loadTourSummary();
+    updateLastUpdatedTime();
+}
+
+async function refreshTourData() {
+    const button = document.getElementById('refresh-tour-data-btn');
+    const originalHTML = button.innerHTML;
+
+    try {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing...';
+
+        const params = new URLSearchParams();
+        if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+
+        const response = await fetch(`/api/tours/refresh?${params}`, {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showSuccess(`${result.message} - Processed: ${result.processed_orders} orders, Updated: ${result.updated_tours} tours`);
+            await refreshTours();
+        } else {
+            showError('Failed to refresh tour data: ' + result.message);
+        }
+
+    } catch (error) {
+        console.error('Error refreshing tour data:', error);
+        showError('Error refreshing tour data. Please try again.');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalHTML;
+    }
+}
+
+function showLoading() {
+    document.getElementById('tours-container').innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading tours...</p>
+        </div>
+    `;
+}
+
+function hideLoading() {
+    // Loading is hidden when content is loaded
+}
+
+function showError(message) {
+    const messagesDiv = document.getElementById('filter-messages');
+    messagesDiv.innerHTML = `
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-exclamation-triangle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+}
+
+function showSuccess(message) {
+    const messagesDiv = document.getElementById('filter-messages');
+    messagesDiv.innerHTML = `
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-check-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = messagesDiv.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
+}
+
+function updateLastUpdatedTime() {
+    const now = new Date();
+    document.getElementById('last-updated').textContent = now.toLocaleTimeString();
+}
+
+// Auto-refresh every 5 minutes
+setInterval(refreshTours, 300000);
+</script>
+{% endblock %}

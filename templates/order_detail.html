@@ -309,7 +309,7 @@
                     <h5 class="mb-0">
                         <i class="fas fa-info-circle me-2"></i>Order Information
                     </h5>
-                    <span class="badge bg-light text-dark">{{ order.orderStatus }}</span>
+                    <span class="badge {{ 'bg-danger' if (order.effective_status or order.orderStatus) == 'CANCELLED' else 'bg-success' if (order.effective_status or order.orderStatus) == 'COMPLETED' else 'bg-warning' if (order.effective_status or order.orderStatus) in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }} text-white">{{ order.effective_status or order.orderStatus }}</span>
                 </div>
             </div>
             <div class="card-body">
@@ -318,7 +318,14 @@
                     <div class="col-md-3">
                         <div class="info-item">
                             <label>Status:</label>
-                            <span class="badge bg-success">{{ order.orderStatus }}</span>
+                            <span class="badge {{ 'bg-danger' if (order.effective_status or order.orderStatus) == 'CANCELLED' else 'bg-success' if (order.effective_status or order.orderStatus) == 'COMPLETED' else 'bg-warning' if (order.effective_status or order.orderStatus) in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }}">{{ order.effective_status or order.orderStatus }}</span>
+                            {% if order.cancellation_reason %}
+                                <div class="mt-2">
+                                    <small class="text-danger">
+                                        <i class="fas fa-times-circle"></i> {{ order.cancellation_reason }}
+                                    </small>
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="col-md-3">

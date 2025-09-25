@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Tour Details - {{ tour.tour_name }} - Locus Assistant{% endblock %}
+
+{% block content %}
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Header Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/tours">Tours</a></li>
+                        <li class="breadcrumb-item active">{{ tour.tour_name }}</li>
+                    </ol>
+                </nav>
+                <h1 class="text-gradient mb-2">
+                    <i class="fas fa-route me-3"></i>{{ tour.tour_name }}
+                </h1>
+                <p class="text-muted mb-0">Tour #{{ tour.tour_number }} - {{ orders_count }} orders</p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-secondary btn-icon" onclick="history.back()">
+                    <i class="fas fa-arrow-left"></i>
+                    Back
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tour Summary Cards -->
+<div class="row mb-4">
+    <!-- Tour Information Card -->
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Tour Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Tour ID</label>
+                            <div class="info-value">{{ tour.tour_id }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Tour Date</label>
+                            <div class="info-value">{{ tour.tour_date }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Plan ID</label>
+                            <div class="info-value">{{ tour.tour_plan_id }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Tour Number</label>
+                            <div class="info-value">#{{ tour.tour_number }}</div>
+                        </div>
+                    </div>
+                    {% if tour.rider_name %}
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Rider</label>
+                            <div class="info-value">
+                                <i class="fas fa-user me-2"></i>{{ tour.rider_name }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if tour.vehicle_registration %}
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Vehicle</label>
+                            <div class="info-value">
+                                <i class="fas fa-truck me-2"></i>{{ tour.vehicle_registration }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if tour.delivery_cities or tour.delivery_areas %}
+                <div class="mt-4">
+                    <h6 class="mb-3">Delivery Coverage</h6>
+                    <div class="row">
+                        {% if tour.delivery_cities %}
+                        <div class="col-md-6">
+                            <div class="info-group">
+                                <label class="info-label">Cities ({{ tour.delivery_cities|length }})</label>
+                                <div class="info-value">
+                                    {% for city in tour.delivery_cities %}
+                                        <span class="badge bg-secondary me-1 mb-1">{{ city }}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if tour.delivery_areas %}
+                        <div class="col-md-6">
+                            <div class="info-group">
+                                <label class="info-label">Unique Locations</label>
+                                <div class="info-value">{{ tour.delivery_areas|length }} locations</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Card -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Order Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value text-primary">{{ tour.total_orders }}</div>
+                        <div class="stat-label">Total Orders</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value text-success">{{ tour.completed_orders }}</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value text-warning">{{ tour.pending_orders }}</div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value text-info">
+                            {{ "%.1f"|format((tour.completed_orders / tour.total_orders * 100) if tour.total_orders > 0 else 0) }}%
+                        </div>
+                        <div class="stat-label">Complete</div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="mt-3">
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar"
+                             style="width: {{ (tour.completed_orders / tour.total_orders * 100) if tour.total_orders > 0 else 0 }}%">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Orders Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-box me-2"></i>Orders in Tour ({{ orders_count }})
+                    </h5>
+                    <div class="d-flex gap-2">
+                        <select class="form-select form-select-sm" id="order-filter" onchange="filterOrders()">
+                            <option value="all">All Orders</option>
+                            <option value="COMPLETED">Completed Only</option>
+                            <option value="EXECUTING">Executing Only</option>
+                            <option value="ASSIGNED">Assigned Only</option>
+                            <option value="OPEN">Open Only</option>
+                        </select>
+                        <input type="text" class="form-control form-control-sm" id="order-search"
+                               placeholder="Search orders..." onkeyup="filterOrders()">
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if orders %}
+                <div class="orders-grid" id="orders-grid">
+                    {% for order in orders %}
+                    <div class="order-card clickable-card hover-glow" onclick="viewOrderDetail('{{ order.id }}', '{{ tour.tour_date.split('-')[0] }}-{{ tour.tour_date.split('-')[1] }}-{{ tour.tour_date.split('-')[2] }}')"
+                         data-order-status="{{ order.effective_status or order.order_status }}"
+                         data-order-id="{{ order.id }}"
+                         data-location-name="{{ order.location_name or '' }}">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fas fa-box"></i>
+                                <div>
+                                    <h6 class="mb-0">Order #{{ loop.index }}</h6>
+                                    <small class="opacity-75">{{ order.id }}</small>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="status-indicator {{ 'danger' if (order.effective_status or order.order_status) == 'CANCELLED' else 'success' if (order.effective_status or order.order_status) == 'COMPLETED' else 'warning' if (order.effective_status or order.order_status) in ['EXECUTING', 'ONGOING'] else 'secondary' }}">
+                                    {{ order.effective_status or order.order_status }}
+                                </span>
+                                {% if order.cancellation_reason %}
+                                    <span class="status-indicator danger small" title="Cancellation Reason: {{ order.cancellation_reason }}">
+                                        <i class="fas fa-times-circle"></i>
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="card-body order-card-content">
+                            <!-- Location Info -->
+                            <div class="order-meta-section">
+                                <h6><i class="fas fa-map-marker-alt"></i>Delivery Location</h6>
+                                <div class="order-info-grid">
+                                    <div class="order-info-item">
+                                        <span class="order-info-label">Location:</span>
+                                        <span class="order-info-value">{{ order.location_name or 'N/A' }}</span>
+                                    </div>
+                                    <div class="order-info-item">
+                                        <span class="order-info-label">City:</span>
+                                        <span class="order-info-value">{{ order.location_city or 'N/A' }}</span>
+                                    </div>
+                                </div>
+                                {% if order.location_address %}
+                                <small class="text-muted d-block mt-2">{{ order.location_address }}</small>
+                                {% endif %}
+                            </div>
+
+                            <!-- Order Details -->
+                            <div class="order-meta-section">
+                                <h6><i class="fas fa-info-circle"></i>Order Details</h6>
+                                <div class="order-info-grid">
+                                    <div class="order-info-item">
+                                        <span class="order-info-label">Client:</span>
+                                        <span class="order-info-value">{{ order.client_id or 'N/A' }}</span>
+                                    </div>
+                                    <div class="order-info-item">
+                                        <span class="order-info-label">Date:</span>
+                                        <span class="order-info-value">{{ order.date or 'N/A' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Completion Info -->
+                            {% if order.completed_on %}
+                            <div class="order-meta-section">
+                                <small class="text-muted d-flex align-items-center gap-2">
+                                    <i class="fas fa-clock"></i>
+                                    Completed: {{ order.completed_on.split('T')[0] }}
+                                    {{ order.completed_on.split('T')[1].split('.')[0] if 'T' in order.completed_on else '' }}
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="card-footer d-flex justify-content-between align-items-center">
+                            <button class="btn btn-sm btn-outline-primary btn-icon hover-lift"
+                                    onclick="event.stopPropagation(); viewOrderDetail('{{ order.id }}', '{{ tour.tour_date.split('-')[0] }}-{{ tour.tour_date.split('-')[1] }}-{{ tour.tour_date.split('-')[2] }}')">
+                                <i class="fas fa-eye"></i>
+                                View Details
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-inbox"></i>
+                    </div>
+                    <h3 class="empty-state-title">No Orders Found</h3>
+                    <p class="empty-state-description">
+                        No orders are associated with this tour.
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function viewOrderDetail(orderId, date) {
+    window.location.href = `/order/${orderId}?date=${date}`;
+}
+
+function filterOrders() {
+    const statusFilter = document.getElementById('order-filter').value;
+    const searchTerm = document.getElementById('order-search').value.toLowerCase().trim();
+    const orderCards = document.querySelectorAll('.order-card');
+
+    orderCards.forEach(card => {
+        const orderStatus = card.getAttribute('data-order-status');
+        const orderId = card.getAttribute('data-order-id').toLowerCase();
+        const locationName = card.getAttribute('data-location-name').toLowerCase();
+
+        // Status filter
+        let statusMatch = statusFilter === 'all' || orderStatus === statusFilter;
+
+        // Search filter
+        let searchMatch = !searchTerm ||
+                         orderId.includes(searchTerm) ||
+                         locationName.includes(searchTerm);
+
+        // Show/hide card
+        if (statusMatch && searchMatch) {
+            card.style.display = 'block';
+            card.classList.remove('filtered-out');
+        } else {
+            card.style.display = 'none';
+            card.classList.add('filtered-out');
+        }
+    });
+
+    // Update count
+    const visibleCards = document.querySelectorAll('.order-card:not(.filtered-out)').length;
+    console.log(`Showing ${visibleCards} of ${orderCards.length} orders`);
+}
+
+// Auto-filter when typing
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('order-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', filterOrders);
+    }
+});
+</script>
+
+<style>
+.info-group {
+    margin-bottom: 1rem;
+}
+
+.info-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--bs-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.info-value {
+    font-size: 0.95rem;
+    color: var(--bs-body-color);
+    word-break: break-word;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 0.75rem;
+    background: var(--bs-light);
+    border-radius: 0.5rem;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--bs-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.filtered-out {
+    display: none !important;
+}
+</style>
+{% endblock %}

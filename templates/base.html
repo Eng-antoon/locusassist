@@ -25,10 +25,30 @@
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="fas fa-truck me-2"></i>Locus Assistant
             </a>
-            <div class="navbar-nav ms-auto">
-                <span class="navbar-text">
-                    <i class="fas fa-user me-1"></i>Amin
-                </span>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'dashboard' }}" href="{{ url_for('dashboard') }}">
+                            <i class="fas fa-tachometer-alt me-1"></i>Orders
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'tours_dashboard' }}" href="{{ url_for('tours_dashboard') }}">
+                            <i class="fas fa-route me-1"></i>Tours
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="navbar-nav">
+                    <span class="navbar-text">
+                        <i class="fas fa-user me-1"></i>Amin
+                    </span>
+                </div>
             </div>
         </div>
     </nav>
