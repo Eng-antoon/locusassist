@@ -123,9 +123,10 @@ body {
     box-shadow: var(--shadow-md);
     transition: var(--transition);
     background: var(--white-bg);
-    overflow: hidden;
+    overflow: visible;
     position: relative;
-    height: 100%;
+    height: auto;
+    min-height: 600px;
 }
 
 .order-card::before {
@@ -219,6 +220,12 @@ body {
     border-top: 1px solid var(--border-color);
     padding: 1rem 1.5rem;
     border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+    margin-top: auto;
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .line-items-summary {
@@ -504,9 +511,17 @@ body {
 }
 
 /* Enhanced Responsive Design */
+@media (min-width: 1400px) {
+    .orders-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2rem;
+    }
+}
+
 @media (max-width: 1400px) {
     .orders-grid {
-        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+        gap: 1.5rem;
     }
 
     .order-stats-grid {
@@ -780,6 +795,7 @@ body {
     .card-footer {
         display: none !important;
     }
+}
 
     .orders-grid {
         display: block;
@@ -1157,15 +1173,17 @@ body {
 .horizontal-filters .horizontal-layout {
     display: flex;
     flex-wrap: wrap;
-    gap: 1.5rem;
+    gap: 1rem;
     align-items: flex-end;
+    justify-content: space-between;
 }
 
 .filter-group {
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-width: 150px;
+    min-width: 180px;
+    max-width: 250px;
 }
 
 .filter-group .filter-label {
@@ -1261,15 +1279,23 @@ body {
 /* Enhanced Order Cards Layout */
 .orders-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
     gap: 1.5rem;
     margin-top: 1.5rem;
+    align-items: start;
+}
+
+.order-card {
+    display: flex;
+    flex-direction: column;
+    min-height: auto;
+    height: auto;
 }
 
 .order-card-content {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
 }
 
 .order-meta-section {
@@ -1530,4 +1556,58 @@ body {
     border-radius: inherit;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
+}
+
+/* Ensure card footer and action buttons are always visible */
+.card-footer {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 10;
+    background: var(--light-bg) !important;
+    border-top: 1px solid var(--border-color) !important;
+}
+
+.action-buttons {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    gap: 0.75rem;
+}
+
+/* Ensure validate/reprocess buttons are visible */
+.validate-order-btn,
+.reprocess-order-btn {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    min-height: 38px;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.validate-order-btn {
+    background: #10b981 !important;
+    color: white !important;
+}
+
+.validate-order-btn:hover {
+    background: #059669 !important;
+    transform: translateY(-1px);
+}
+
+.reprocess-order-btn {
+    background: #f59e0b !important;
+    color: white !important;
+}
+
+.reprocess-order-btn:hover {
+    background: #d97706 !important;
+    transform: translateY(-1px);
 }

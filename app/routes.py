@@ -24,6 +24,8 @@ def register_routes(app, config):
     def has_grn_document(order_data):
         """Check if an order has a GRN document available"""
         try:
+            order_id = order_data.get('id', 'unknown')
+
             # Try different possible paths where the GRN might be stored
             possible_paths = [
                 # Direct path
@@ -45,6 +47,7 @@ def register_routes(app, config):
                     for key in path:
                         current_data = current_data[key]
                     if isinstance(current_data, str) and current_data.startswith('http'):
+                        logger.info(f"Order {order_id}: Found GRN document at path: {' -> '.join(path)}")
                         return True
                 except (KeyError, TypeError):
                     continue
@@ -69,8 +72,10 @@ def register_routes(app, config):
 
                 found_urls = find_urls_recursive(proof_data)
                 if found_urls:
+                    logger.info(f"Order {order_id}: Found GRN document via recursive search: {found_urls[0]}")
                     return True
 
+            logger.info(f"Order {order_id}: No GRN document found")
             return False
         except Exception as e:
             logger.error(f"Error checking GRN document for order: {e}")
@@ -250,6 +255,46 @@ def register_routes(app, config):
         )
 
         return jsonify(orders_data or {'error': 'Failed to fetch orders'})
+
+    @app.route('/api/refresh-orders', methods=['POST'])
+    def refresh_orders():
+        """Refresh orders by clearing cache and fetching fresh data from Locus API"""
+        try:
+            # Get parameters
+            date = request.args.get('date') or datetime.now().strftime("%Y-%m-%d")
+
+            logger.info(f"REFRESH REQUEST: Forcing fresh fetch for date {date}")
+
+            # Smart refresh: fetch fresh data and merge with database (no deletion)
+            orders_data = locus_auth.refresh_orders_smart_merge(
+                config.BEARER_TOKEN,
+                'illa-frontdoor',
+                date=date,
+                fetch_all=True
+            )
+
+            if orders_data:
+                total_count = orders_data.get('totalCount', 0)
+
+                return jsonify({
+                    'success': True,
+                    'message': f'✅ Refreshed data from Locus API. Found {total_count} orders for {date}',
+                    'total_orders_count': total_count,
+                    'date': date,
+                    'orders': orders_data.get('orders', [])
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to refresh orders from API'
+                }), 500
+
+        except Exception as e:
+            logger.error(f"Error refreshing orders: {e}")
+            return jsonify({
+                'success': False,
+                'message': f'Error refreshing orders: {str(e)}'
+            }), 500
 
     @app.route('/order/<order_id>')
     def order_detail(order_id):

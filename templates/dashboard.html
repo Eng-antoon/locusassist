@@ -37,8 +37,8 @@
                     <small class="text-muted d-block">Last Updated</small>
                     <span class="fw-semibold" id="last-updated">--:--:--</span>
                 </div>
-                <button class="btn btn-primary btn-icon hover-lift" onclick="location.reload()">
-                    <i class="fas fa-sync-alt"></i>
+                <button class="btn btn-primary btn-icon hover-lift" onclick="refreshOrders()">
+                    <i class="fas fa-sync-alt" id="refresh-icon"></i>
                     Refresh
                 </button>
             </div>
@@ -383,28 +383,30 @@
                     </div>
 
                     <div class="action-buttons">
-                        {% if not order.has_grn %}
+                        {% if order.has_grn %}
+                            {% if order.validation_summary and order.validation_summary.has_validation %}
+                                <button class="btn btn-sm btn-warning btn-icon hover-lift reprocess-order-btn"
+                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                        data-date="{{ selected_date }}"
+                                        title="Re-process GRN with AI"
+                                        onclick="event.stopPropagation();">
+                                    <i class="fas fa-redo"></i>
+                                    Re-process GRN
+                                </button>
+                            {% else %}
+                                <button class="btn btn-sm btn-success btn-icon hover-lift validate-order-btn"
+                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                        data-date="{{ selected_date }}"
+                                        title="Validate GRN with AI"
+                                        onclick="event.stopPropagation();">
+                                    <i class="fas fa-check-circle"></i>
+                                    Validate GRN
+                                </button>
+                            {% endif %}
+                        {% else %}
                             <button class="btn btn-sm btn-secondary btn-icon" disabled>
                                 <i class="fas fa-file-times"></i>
-                                NO GRN Document To Process
-                            </button>
-                        {% elif order.validation_summary and order.validation_summary.has_validation %}
-                            <button class="btn btn-sm btn-warning btn-icon hover-lift reprocess-order-btn"
-                                    data-order-id="{{ order.id if order.id else loop.index0 }}"
-                                    data-date="{{ selected_date }}"
-                                    title="Re-process GRN with AI"
-                                    onclick="event.stopPropagation();">
-                                <i class="fas fa-redo"></i>
-                                Re-process
-                            </button>
-                        {% else %}
-                            <button class="btn btn-sm btn-success btn-icon hover-lift validate-order-btn"
-                                    data-order-id="{{ order.id if order.id else loop.index0 }}"
-                                    data-date="{{ selected_date }}"
-                                    title="Validate GRN with AI"
-                                    onclick="event.stopPropagation();">
-                                <i class="fas fa-check-circle"></i>
-                                Validate GRN
+                                No GRN Document Available
                             </button>
                         {% endif %}
                     </div>

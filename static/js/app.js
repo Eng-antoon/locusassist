@@ -161,9 +161,54 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Global functions
-window.refreshOrders = function() {
-    showToast('Refreshing orders...', 'info');
-    location.reload();
+window.refreshOrders = async function() {
+    const refreshButton = document.querySelector('button[onclick="refreshOrders()"]');
+    const refreshIcon = document.getElementById('refresh-icon');
+
+    try {
+        // Show loading state
+        refreshButton.disabled = true;
+        if (refreshIcon) {
+            refreshIcon.classList.add('fa-spin');
+        }
+        showToast('Fetching new orders from Locus...', 'info');
+
+        // Get current date from URL or use today
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
+
+        // Call refresh endpoint
+        const response = await fetch(`/api/refresh-orders?date=${currentDate}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            const message = result.message || `✅ Refreshed! Found ${result.total_orders_count} orders`;
+            showToast(message, 'success');
+
+            // Reload page to show updated orders
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showToast(`❌ Error: ${result.message}`, 'error');
+        }
+
+    } catch (error) {
+        console.error('Error refreshing orders:', error);
+        showToast('❌ Failed to refresh orders. Please try again.', 'error');
+    } finally {
+        // Remove loading state
+        refreshButton.disabled = false;
+        if (refreshIcon) {
+            refreshIcon.classList.remove('fa-spin');
+        }
+    }
 };
 
 // Modern enhancement functions
@@ -300,17 +345,7 @@ window.clearAllFilters = function() {
     if (resultIndicator) resultIndicator.remove();
 };
 
-window.refreshOrders = function() {
-    // Show loading toast
-    showToast('Refreshing orders data...', 'info');
-
-    // Add loading state to page
-    document.body.classList.add('loading');
-
-    setTimeout(() => {
-        location.reload();
-    }, 500);
-};
+// Removed duplicate refreshOrders function - using the async version above that calls the API
 
 // Enhanced toast system
 function showToast(message, type = 'info', duration = 4000) {

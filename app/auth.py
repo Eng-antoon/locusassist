@@ -171,6 +171,34 @@ class LocusAuth:
             logger.error(f"Error caching orders to database: {e}")
             db.session.rollback()
 
+    def clear_orders_cache(self, client_id, date_str):
+        """Clear cached orders from database for a specific date"""
+        try:
+            from models import OrderLineItem
+            order_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+            # First, find all orders for this date and client
+            orders_to_delete = Order.query.filter_by(client_id=client_id, date=order_date).all()
+            order_ids = [order.id for order in orders_to_delete]
+
+            if not order_ids:
+                logger.info(f"No orders found to clear for date {date_str}")
+                return True
+
+            # Delete related OrderLineItems first to avoid foreign key constraints
+            line_items_deleted = OrderLineItem.query.filter(OrderLineItem.order_id.in_(order_ids)).delete(synchronize_session=False)
+
+            # Then delete the orders
+            orders_deleted = Order.query.filter_by(client_id=client_id, date=order_date).delete()
+
+            db.session.commit()
+            logger.info(f"Cleared {orders_deleted} cached orders and {line_items_deleted} line items for date {date_str}")
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing orders cache: {e}")
+            db.session.rollback()
+            return False
+
     def get_orders_from_database(self, client_id, date_str):
         """Get cached orders from database"""
         try:
@@ -203,20 +231,228 @@ class LocusAuth:
             logger.error(f"Error getting cached orders: {e}")
             return None
 
-    def get_orders(self, access_token, client_id="illa-frontdoor", team_id="101", date=None, fetch_all=False):
+    def refresh_orders_force_fresh(self, access_token, client_id="illa-frontdoor", team_id="101", date=None, fetch_all=True):
+        """Force refresh orders by clearing cache and fetching fresh data from API - like viewing a new date."""
+        try:
+            if not date:
+                date = datetime.now().strftime("%Y-%m-%d")
+
+            logger.info(f"REFRESH: Clearing cache and fetching fresh orders for {date}...")
+
+            # Step 1: Clear existing cache for this date
+            self.clear_orders_cache(client_id, date)
+
+            # Step 2: Fetch fresh data from API (same logic as normal get_orders but force API)
+            fresh_orders_data = self._fetch_orders_from_api(access_token, client_id, team_id, date, fetch_all)
+
+            if not fresh_orders_data or not fresh_orders_data.get('orders'):
+                logger.warning("No fresh orders received from API during refresh")
+                return {'orders': [], 'totalCount': 0, 'new_orders_count': 0}
+
+            # Step 3: Cache the fresh data to database
+            self.cache_orders_to_database(fresh_orders_data, client_id, date)
+
+            logger.info(f"REFRESH: Successfully fetched {len(fresh_orders_data['orders'])} fresh orders from API and cached them")
+
+            return {
+                'orders': fresh_orders_data['orders'],
+                'totalCount': fresh_orders_data.get('totalCount', len(fresh_orders_data['orders'])),
+                'cached': False,
+                'new_orders_count': fresh_orders_data.get('totalCount', len(fresh_orders_data['orders']))  # All are "new" since we cleared cache
+            }
+
+        except Exception as e:
+            logger.error(f"Error during force refresh: {e}")
+            # If refresh fails, try to return any existing data
+            return self.get_orders_from_database(client_id, date) or {'orders': [], 'totalCount': 0, 'new_orders_count': 0}
+
+    def _fetch_orders_from_api(self, access_token, client_id, team_id, date, fetch_all):
+        """Internal method to fetch orders directly from API (no caching)"""
+        logger.info(f"Fetching orders from API for date: {date}")
+
+        if fetch_all:
+            return self._fetch_all_orders_from_api(access_token, client_id, team_id, date)
+        else:
+            return self._fetch_single_page_from_api(access_token, client_id, team_id, date)
+
+    def _fetch_all_orders_from_api(self, access_token, client_id, team_id, date):
+        """Fetch all pages of orders from API"""
+        url = f"{self.api_url}/v1/client/{client_id}/order-search?include=LOCATION%2CHOMEBASE&countsOnly=false"
+        headers = {
+            "accept": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "content-type": "application/json",
+            "l-custom-user-agent": "cerebro",
+        }
+
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+
+        next_date = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        logger.info(f"REFRESH API: Fetching from {url} for date range {date} to {next_date}")
+
+        def get_page(page_num):
+            payload = {
+                "page": page_num,
+                "size": 50,
+                "sortingInfo": [],
+                "filters": [
+                    {
+                        "name": "orderStatus",
+                        "operation": "EQUALS",
+                        "value": None,
+                        "values": ["COMPLETED"],
+                        "allowEmptyOrNull": False,
+                        "caseSensitive": False
+                    },
+                    {
+                        "name": "teamId",
+                        "operation": "EQUALS",
+                        "value": None,
+                        "values": [team_id],
+                        "allowEmptyOrNull": False,
+                        "caseSensitive": True
+                    },
+                    {
+                        "name": "date",
+                        "operation": "GREATER_THAN_OR_EQUAL_TO",
+                        "value": date,
+                        "values": [],
+                        "allowEmptyOrNull": False,
+                        "caseSensitive": False
+                    },
+                    {
+                        "name": "date",
+                        "operation": "LESSER_THAN",
+                        "value": next_date,
+                        "values": [],
+                        "allowEmptyOrNull": False,
+                        "caseSensitive": False
+                    }
+                ]
+            }
+
+            logger.info(f"REFRESH API: Making request to page {page_num} with payload: {payload}")
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"REFRESH API: Page {page_num} response - content length: {len(result.get('content', []))}, totalElements: {result.get('totalElements', 0)}")
+            return result
+
+        # Fetch all pages
+        page = 1
+        all_orders = []
+
+        while True:
+            logger.info(f"REFRESH API: Fetching page {page}...")
+            page_data = get_page(page)
+
+            orders = page_data.get('content', [])
+            total_elements = page_data.get('totalElements', 0)
+
+            if not orders:
+                logger.info(f"REFRESH API: No orders found on page {page} (totalElements: {total_elements})")
+                break
+
+            all_orders.extend(orders)
+            logger.info(f"REFRESH API: Page {page}: {len(orders)} orders (Total so far: {len(all_orders)})")
+
+            # Check if there are more pages
+            if len(orders) < 50:  # Less than page size means last page
+                break
+            page += 1
+
+        logger.info(f"REFRESH API: Fetched total {len(all_orders)} orders from {page} pages")
+
+        return {
+            "orders": all_orders,
+            "totalCount": len(all_orders)
+        }
+
+    def _fetch_single_page_from_api(self, access_token, client_id, team_id, date):
+        """Fetch single page of orders from API"""
+        url = f"{self.api_url}/v1/client/{client_id}/order-search?include=LOCATION%2CHOMEBASE&countsOnly=false"
+        headers = {
+            "accept": "application/json",
+            "authorization": f"Bearer {access_token}",
+            "content-type": "application/json",
+            "l-custom-user-agent": "cerebro",
+        }
+
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+
+        next_date = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        payload = {
+            "page": 1,
+            "size": 50,
+            "sortingInfo": [],
+            "filters": [
+                {
+                    "name": "orderStatus",
+                    "operation": "EQUALS",
+                    "value": None,
+                    "values": ["COMPLETED"],
+                    "allowEmptyOrNull": False,
+                    "caseSensitive": False
+                },
+                {
+                    "name": "teamId",
+                    "operation": "EQUALS",
+                    "value": None,
+                    "values": [team_id],
+                    "allowEmptyOrNull": False,
+                    "caseSensitive": True
+                },
+                {
+                    "name": "date",
+                    "operation": "GREATER_THAN_OR_EQUAL_TO",
+                    "value": date,
+                    "values": [],
+                    "allowEmptyOrNull": False,
+                    "caseSensitive": False
+                },
+                {
+                    "name": "date",
+                    "operation": "LESSER_THAN",
+                    "value": next_date,
+                    "values": [],
+                    "allowEmptyOrNull": False,
+                    "caseSensitive": False
+                }
+            ]
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        page_data = response.json()
+
+        return {
+            "orders": page_data.get('content', []),
+            "totalCount": page_data.get('totalElements', 0)
+        }
+
+    def get_orders(self, access_token, client_id="illa-frontdoor", team_id="101", date=None, fetch_all=False, force_refresh=False):
         """Fetch orders data - can fetch all pages or single page. Uses database caching."""
         try:
             if not date:
                 date = datetime.now().strftime("%Y-%m-%d")
 
-            # First, try to get from database cache
-            cached_orders = self.get_orders_from_database(client_id, date)
-            if cached_orders:
-                logger.info(f"Returning {len(cached_orders['orders'])} cached orders for {date}")
-                return cached_orders
+            # If force_refresh is False, try to get from database cache first
+            if not force_refresh:
+                cached_orders = self.get_orders_from_database(client_id, date)
+                if cached_orders:
+                    logger.info(f"Returning {len(cached_orders['orders'])} cached orders for {date}")
+                    return cached_orders
 
-            # If no cached data, fetch from API
-            logger.info(f"No cached orders found for {date}. Fetching from API...")
+            # If no cached data OR force_refresh=True, fetch from API
+            if force_refresh:
+                logger.info(f"FORCE REFRESH: Fetching fresh data from API for {date} (bypassing database cache)")
+            else:
+                logger.info(f"No cached orders found for {date}. Fetching from API...")
+
             url = f"{self.api_url}/v1/client/{client_id}/order-search?include=LOCATION%2CHOMEBASE&countsOnly=false"
             headers = {
                 "accept": "application/json",
@@ -356,3 +592,140 @@ class LocusAuth:
         except Exception as e:
             logger.error(f"Error getting order detail {order_id}: {e}")
             return None
+
+    def refresh_orders_smart_merge(self, access_token, client_id="illa-frontdoor", team_id="101", date=None, fetch_all=True):
+        """Smart refresh: fetches fresh data and merges with database without deleting existing records"""
+        try:
+            if not date:
+                date = datetime.now().strftime("%Y-%m-%d")
+
+            logger.info(f"SMART REFRESH: Fetching fresh data from API for {date} (keeping existing database records)...")
+
+            # Step 1: Fetch fresh data from API using force_refresh=True
+            fresh_orders_data = self.get_orders(access_token, client_id, team_id, date, fetch_all, force_refresh=True)
+
+            if fresh_orders_data and fresh_orders_data.get('orders'):
+                # Step 2: Smart merge - this will update existing records or add new ones
+                self.smart_merge_orders_to_database(fresh_orders_data, client_id, date)
+                logger.info(f"SMART REFRESH: Successfully merged {len(fresh_orders_data['orders'])} orders from API with database")
+
+                # Return merged data from database
+                return self.get_orders_from_database(client_id, date)
+            else:
+                logger.warning("No fresh orders received from API during smart refresh")
+                # Return existing database data
+                return self.get_orders_from_database(client_id, date) or {'orders': [], 'totalCount': 0}
+
+        except Exception as e:
+            logger.error(f"Error during smart refresh: {e}")
+            # Return existing database data as fallback
+            return self.get_orders_from_database(client_id, date) or {'orders': [], 'totalCount': 0}
+
+    def smart_merge_orders_to_database(self, orders_data, client_id, date_str):
+        """Merge orders to database - update existing, add new ones"""
+        try:
+            from models import OrderLineItem
+
+            order_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            orders = orders_data.get('orders', [])
+
+            updated_count = 0
+            added_count = 0
+
+            for order_data in orders:
+                order_id = order_data.get('id')
+                if not order_id:
+                    continue
+
+                # Check if order already exists
+                existing_order = Order.query.filter_by(id=order_id).first()
+
+                if existing_order:
+                    # Update existing order - only update if data has changed
+                    new_raw_data = json.dumps(order_data)
+                    if existing_order.raw_data != new_raw_data:
+                        existing_order.raw_data = new_raw_data
+                        existing_order.order_status = order_data.get('orderStatus', '')
+                        # Update other fields as needed
+                        location = order_data.get('location', {})
+                        current_tour = order_data.get('currentTour', {})
+
+                        existing_order.location_name = location.get('name', '')
+                        existing_order.location_address = location.get('address', '')
+                        existing_order.location_city = location.get('city', '')
+                        existing_order.location_country_code = location.get('countryCode', '')
+                        existing_order.rider_name = current_tour.get('riderName', '')
+                        existing_order.vehicle_registration = current_tour.get('vehicleRegistration', '')
+
+                        if order_data.get('completedOn'):
+                            try:
+                                existing_order.completed_on = datetime.fromisoformat(order_data['completedOn'].replace('Z', '+00:00'))
+                            except:
+                                pass
+
+                        updated_count += 1
+                        logger.info(f"Updated existing order: {order_id}")
+                else:
+                    # Add new order
+                    self._create_new_order_record(order_data, client_id, order_date)
+                    added_count += 1
+                    logger.info(f"Added new order: {order_id}")
+
+            db.session.commit()
+            logger.info(f"Smart merge completed: {updated_count} updated, {added_count} added")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error in smart merge: {e}")
+            db.session.rollback()
+            return False
+
+    def _create_new_order_record(self, order_data, client_id, order_date):
+        """Helper method to create a new order record"""
+        from models import OrderLineItem
+
+        order_id = order_data.get('id')
+
+        # Extract order information
+        order_status = order_data.get('orderStatus', '')
+        location = order_data.get('location', {})
+        current_tour = order_data.get('currentTour', {})
+
+        completed_on = None
+        if order_data.get('completedOn'):
+            try:
+                completed_on = datetime.fromisoformat(order_data['completedOn'].replace('Z', '+00:00'))
+            except:
+                pass
+
+        # Create order
+        order = Order(
+            id=order_id,
+            client_id=client_id,
+            date=order_date,
+            order_status=order_status,
+            location_name=location.get('name', ''),
+            location_address=location.get('address', ''),
+            location_city=location.get('city', ''),
+            location_country_code=location.get('countryCode', ''),
+            rider_name=current_tour.get('riderName', ''),
+            vehicle_registration=current_tour.get('vehicleRegistration', ''),
+            completed_on=completed_on,
+            raw_data=json.dumps(order_data)
+        )
+
+        db.session.add(order)
+
+        # Add line items if they exist
+        line_items = order_data.get('lineItems', [])
+        for item in line_items:
+            line_item = OrderLineItem(
+                order_id=order_id,
+                sku_id=item.get('skuId', ''),
+                name=item.get('name', ''),
+                quantity=item.get('quantity', 0),
+                quantity_unit=item.get('quantityUnit', ''),
+                transacted_quantity=item.get('transactedQuantity'),
+                transaction_status=item.get('transactionStatus', '')
+            )
+            db.session.add(line_item)
