@@ -174,6 +174,7 @@ def register_routes(app, config):
         # Get today's date for default filter
         today = datetime.now().strftime("%Y-%m-%d")
         selected_date = request.args.get('date', today)
+        selected_order_status = request.args.get('order_status', 'all')  # Default to all orders
 
         # Validate date format
         try:
@@ -185,12 +186,18 @@ def register_routes(app, config):
 
         fetch_all = request.args.get('all', 'true').lower() == 'true'  # Default to fetch all
 
-        # Fetch all orders using bearer token
+        # Parse order status filter
+        order_statuses = None
+        if selected_order_status and selected_order_status.lower() != 'all':
+            order_statuses = [selected_order_status.upper()]
+
+        # Fetch orders using bearer token with status filtering
         orders_data = locus_auth.get_orders(
             config.BEARER_TOKEN,
             'illa-frontdoor',
             date=selected_date,
-            fetch_all=fetch_all
+            fetch_all=fetch_all,
+            order_statuses=order_statuses
         )
 
         # Enhance orders with validation summaries and GRN status
@@ -239,6 +246,7 @@ def register_routes(app, config):
         return render_template('dashboard.html',
                              orders_data=orders_data,
                              selected_date=selected_date,
+                             selected_order_status=selected_order_status,
                              username='Amin',
                              fetch_all=fetch_all)
 
@@ -246,12 +254,19 @@ def register_routes(app, config):
     def api_orders():
         date = request.args.get('date')
         fetch_all = request.args.get('all', 'true').lower() == 'true'
+        order_status = request.args.get('order_status', 'all')
+
+        # Parse order status filter
+        order_statuses = None
+        if order_status and order_status.lower() != 'all':
+            order_statuses = [order_status.upper()]
 
         orders_data = locus_auth.get_orders(
             config.BEARER_TOKEN,
             'illa-frontdoor',
             date=date,
-            fetch_all=fetch_all
+            fetch_all=fetch_all,
+            order_statuses=order_statuses
         )
 
         return jsonify(orders_data or {'error': 'Failed to fetch orders'})
@@ -262,25 +277,41 @@ def register_routes(app, config):
         try:
             # Get parameters
             date = request.args.get('date') or datetime.now().strftime("%Y-%m-%d")
+            order_status = request.args.get('order_status', 'all')
 
-            logger.info(f"REFRESH REQUEST: Forcing fresh fetch for date {date}")
+            # Parse order status filter
+            order_statuses = None
+            if order_status and order_status.lower() != 'all':
+                order_statuses = [order_status.upper()]
+
+            status_msg = f"all statuses" if not order_statuses else ", ".join(order_statuses)
+            logger.info(f"REFRESH REQUEST: Forcing fresh fetch for date {date} (statuses: {status_msg})")
 
             # Smart refresh: fetch fresh data and merge with database (no deletion)
             orders_data = locus_auth.refresh_orders_smart_merge(
                 config.BEARER_TOKEN,
                 'illa-frontdoor',
                 date=date,
-                fetch_all=True
+                fetch_all=True,
+                order_statuses=order_statuses
             )
 
             if orders_data:
                 total_count = orders_data.get('totalCount', 0)
+                status_totals = orders_data.get('statusTotals', {})
+
+                # Create summary message with status breakdown
+                status_breakdown = ""
+                if status_totals:
+                    status_breakdown = " | Status breakdown: " + ", ".join([f"{status}: {count}" for status, count in status_totals.items()])
 
                 return jsonify({
                     'success': True,
-                    'message': f'✅ Refreshed data from Locus API. Found {total_count} orders for {date}',
+                    'message': f'✅ Refreshed data from Locus API. Found {total_count} orders for {date}{status_breakdown}',
                     'total_orders_count': total_count,
                     'date': date,
+                    'order_status': order_status,
+                    'status_totals': status_totals,
                     'orders': orders_data.get('orders', [])
                 })
             else:

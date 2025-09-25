@@ -173,12 +173,13 @@ window.refreshOrders = async function() {
         }
         showToast('Fetching new orders from Locus...', 'info');
 
-        // Get current date from URL or use today
+        // Get current parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         const currentDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
+        const currentOrderStatus = urlParams.get('order_status') || 'all';
 
-        // Call refresh endpoint
-        const response = await fetch(`/api/refresh-orders?date=${currentDate}`, {
+        // Call refresh endpoint with current filters
+        const response = await fetch(`/api/refresh-orders?date=${currentDate}&order_status=${currentOrderStatus}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

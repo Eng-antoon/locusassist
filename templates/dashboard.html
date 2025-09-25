@@ -47,7 +47,7 @@
 </div>
 
 {% if orders_data and orders_data.orders %}
-<!-- Statistics Cards -->
+<!-- Statistics Cards with Order Status Totals -->
 <div class="order-stats-grid mb-4">
     <div class="stat-card hover-lift">
         <div class="stat-icon">
@@ -57,29 +57,57 @@
         <div class="stat-label">Total Orders</div>
     </div>
 
-    <div class="stat-card hover-lift">
-        <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
-            <i class="fas fa-check-circle"></i>
+    <!-- Order Status Breakdown Cards -->
+    {% if orders_data.statusTotals %}
+        {% for status, count in orders_data.statusTotals.items() %}
+            <div class="stat-card hover-lift">
+                <div class="stat-icon" style="background:
+                    {% if status == 'COMPLETED' %}rgba(16, 185, 129, 0.1); color: var(--success-color);
+                    {% elif status == 'EXECUTING' %}rgba(59, 130, 246, 0.1); color: var(--primary-color);
+                    {% elif status == 'CANCELLED' %}rgba(239, 68, 68, 0.1); color: var(--danger-color);
+                    {% elif status == 'ASSIGNED' %}rgba(245, 158, 11, 0.1); color: var(--warning-color);
+                    {% else %}rgba(107, 114, 128, 0.1); color: var(--secondary-color);{% endif %}">
+                    <i class="fas fa-
+                        {% if status == 'COMPLETED' %}check-circle
+                        {% elif status == 'EXECUTING' %}truck
+                        {% elif status == 'CANCELLED' %}times-circle
+                        {% elif status == 'ASSIGNED' %}user-check
+                        {% elif status == 'OPEN' %}unlock
+                        {% elif status == 'PARKED' %}pause-circle
+                        {% elif status == 'PLANNING' %}edit
+                        {% elif status == 'PLANNED' %}clipboard-list
+                        {% else %}box{% endif %}"></i>
+                </div>
+                <div class="stat-value">{{ count }}</div>
+                <div class="stat-label">{{ status|title }}</div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <!-- Fallback validation cards if no status totals -->
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|selectattr('validation_summary.is_valid')|list|length }}</div>
+            <div class="stat-label">Validated Orders</div>
         </div>
-        <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|selectattr('validation_summary.is_valid')|list|length }}</div>
-        <div class="stat-label">Validated Orders</div>
-    </div>
 
-    <div class="stat-card hover-lift">
-        <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
-            <i class="fas fa-exclamation-triangle"></i>
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|rejectattr('validation_summary.is_valid', 'equalto', true)|list|length }}</div>
+            <div class="stat-label">Issues Found</div>
         </div>
-        <div class="stat-value">{{ orders_data.orders|selectattr('validation_summary')|rejectattr('validation_summary.is_valid', 'equalto', true)|list|length }}</div>
-        <div class="stat-label">Issues Found</div>
-    </div>
 
-    <div class="stat-card hover-lift">
-        <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color);">
-            <i class="fas fa-file-slash"></i>
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color);">
+                <i class="fas fa-file-slash"></i>
+            </div>
+            <div class="stat-value">{{ orders_data.orders|rejectattr('has_grn')|list|length }}</div>
+            <div class="stat-label">No GRN</div>
         </div>
-        <div class="stat-value">{{ orders_data.orders|rejectattr('has_grn')|list|length }}</div>
-        <div class="stat-label">No GRN</div>
-    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -101,7 +129,8 @@
                         <i class="fas fa-calendar-alt me-1"></i>
                         Date
                     </label>
-                    <form method="GET" class="filter-control">
+                    <form method="GET" class="filter-control" id="date-form">
+                        <input type="hidden" name="order_status" value="{{ selected_order_status }}">
                         <div class="input-group input-group-sm">
                             <input type="date" name="date" value="{{ selected_date }}" class="form-control">
                             <button type="submit" class="btn btn-primary">
@@ -109,6 +138,27 @@
                             </button>
                         </div>
                     </form>
+                </div>
+
+                <!-- Order Status Filter -->
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <i class="fas fa-list-ul me-1"></i>
+                        Order Status
+                    </label>
+                    <div class="filter-control">
+                        <select id="orderStatusFilter" class="form-select form-select-sm" onchange="changeOrderStatus()">
+                            <option value="all" {{ 'selected' if selected_order_status == 'all' else '' }}>🔄 All Orders</option>
+                            <option value="completed" {{ 'selected' if selected_order_status == 'completed' else '' }}>✅ Completed</option>
+                            <option value="executing" {{ 'selected' if selected_order_status == 'executing' else '' }}>⚡ Executing</option>
+                            <option value="cancelled" {{ 'selected' if selected_order_status == 'cancelled' else '' }}>❌ Cancelled</option>
+                            <option value="assigned" {{ 'selected' if selected_order_status == 'assigned' else '' }}>📋 Assigned</option>
+                            <option value="open" {{ 'selected' if selected_order_status == 'open' else '' }}>🔓 Open</option>
+                            <option value="parked" {{ 'selected' if selected_order_status == 'parked' else '' }}>⏸️ Parked</option>
+                            <option value="planning" {{ 'selected' if selected_order_status == 'planning' else '' }}>📝 Planning</option>
+                            <option value="planned" {{ 'selected' if selected_order_status == 'planned' else '' }}>📊 Planned</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Search -->
@@ -127,11 +177,11 @@
                     </div>
                 </div>
 
-                <!-- Status Filter -->
+                <!-- Validation Status Filter -->
                 <div class="filter-group">
                     <label class="filter-label">
                         <i class="fas fa-filter me-1"></i>
-                        Status
+                        Validation Status
                     </label>
                     <div class="filter-control">
                         <select id="issueFilter" class="form-select form-select-sm" onchange="filterByIssues()">
@@ -158,10 +208,17 @@
                     </label>
                     <div class="filter-control">
                         <div class="btn-group-sm d-flex gap-1">
-                            <button class="btn btn-warning" id="validate-all-btn">
-                                <i class="fas fa-tasks me-1"></i>
-                                Validate All
-                            </button>
+                            {% if selected_order_status == 'all' or selected_order_status == 'completed' %}
+                                <button class="btn btn-warning" id="validate-all-btn">
+                                    <i class="fas fa-tasks me-1"></i>
+                                    Validate All
+                                </button>
+                            {% else %}
+                                <button class="btn btn-outline-warning" id="validate-all-btn" disabled title="Batch validation only available for completed orders">
+                                    <i class="fas fa-lock me-1"></i>
+                                    Validate All (Completed Only)
+                                </button>
+                            {% endif %}
                             <button type="button" class="btn btn-outline-primary" onclick="location.reload()">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
@@ -179,7 +236,17 @@
         <div class="col-12">
             <div class="alert alert-info">
                 <i class="fas fa-info-circle me-2"></i>
-                Found <strong>{{ orders_data.orders|length }}</strong> completed orders for {{ selected_date }}
+                Found <strong>{{ orders_data.orders|length }}</strong>
+                {% if selected_order_status == 'all' %}orders{% else %}{{ selected_order_status|title }} orders{% endif %}
+                for {{ selected_date }}
+                {% if orders_data.statusTotals and orders_data.statusTotals|length > 1 %}
+                    <div class="mt-2 small">
+                        <strong>Status breakdown:</strong>
+                        {% for status, count in orders_data.statusTotals.items() %}
+                            <span class="badge bg-secondary me-1">{{ status }}: {{ count }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -383,30 +450,37 @@
                     </div>
 
                     <div class="action-buttons">
-                        {% if order.has_grn %}
-                            {% if order.validation_summary and order.validation_summary.has_validation %}
-                                <button class="btn btn-sm btn-warning btn-icon hover-lift reprocess-order-btn"
-                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
-                                        data-date="{{ selected_date }}"
-                                        title="Re-process GRN with AI"
-                                        onclick="event.stopPropagation();">
-                                    <i class="fas fa-redo"></i>
-                                    Re-process GRN
-                                </button>
+                        {% if order.orderStatus == 'COMPLETED' %}
+                            {% if order.has_grn %}
+                                {% if order.validation_summary and order.validation_summary.has_validation %}
+                                    <button class="btn btn-sm btn-warning btn-icon hover-lift reprocess-order-btn"
+                                            data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                            data-date="{{ selected_date }}"
+                                            title="Re-process GRN with AI"
+                                            onclick="event.stopPropagation();">
+                                        <i class="fas fa-redo"></i>
+                                        Re-process GRN
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-success btn-icon hover-lift validate-order-btn"
+                                            data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                            data-date="{{ selected_date }}"
+                                            title="Validate GRN with AI"
+                                            onclick="event.stopPropagation();">
+                                        <i class="fas fa-check-circle"></i>
+                                        Validate GRN
+                                    </button>
+                                {% endif %}
                             {% else %}
-                                <button class="btn btn-sm btn-success btn-icon hover-lift validate-order-btn"
-                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
-                                        data-date="{{ selected_date }}"
-                                        title="Validate GRN with AI"
-                                        onclick="event.stopPropagation();">
-                                    <i class="fas fa-check-circle"></i>
-                                    Validate GRN
+                                <button class="btn btn-sm btn-secondary btn-icon" disabled title="No GRN document available for this order">
+                                    <i class="fas fa-file-times"></i>
+                                    No GRN Document
                                 </button>
                             {% endif %}
                         {% else %}
-                            <button class="btn btn-sm btn-secondary btn-icon" disabled>
-                                <i class="fas fa-file-times"></i>
-                                No GRN Document Available
+                            <button class="btn btn-sm btn-outline-secondary btn-icon" disabled title="GRN validation only available for completed orders">
+                                <i class="fas fa-lock"></i>
+                                GRN Validation (Completed Only)
                             </button>
                         {% endif %}
                     </div>
@@ -453,6 +527,20 @@
 
 {% block scripts %}
 <script>
+// Function to change order status filter
+function changeOrderStatus() {
+    const orderStatusSelect = document.getElementById('orderStatusFilter');
+    const selectedStatus = orderStatusSelect.value;
+    const selectedDate = '{{ selected_date }}';
+
+    // Navigate to dashboard with new order status filter
+    const url = new URL(window.location.href);
+    url.searchParams.set('order_status', selectedStatus);
+    url.searchParams.set('date', selectedDate);
+
+    window.location.href = url.toString();
+}
+
 // Function to view order details
 function viewOrderDetail(orderId, date) {
     window.location.href = `/order/${orderId}?date=${date}`;
