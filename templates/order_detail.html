@@ -1,0 +1,662 @@
+{% extends "base.html" %}
+
+{% block title %}Order Details - Locus Assistant{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h2>
+            <i class="fas fa-box me-2"></i>Order {{ order_id }} Details
+        </h2>
+    </div>
+    <div class="col-md-6 text-end">
+        <button class="btn btn-success me-2" id="validate-order-btn" data-order-id="{{ order_id }}" data-date="{{ date }}">
+            <i class="fas fa-check-circle me-1"></i>Validate GRN
+        </button>
+        <a href="{{ url_for('dashboard', date=date) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Validation Status Section -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div id="validation-status" class="validation-status" style="display: none;">
+            <!-- Validation results will be displayed here -->
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Order Information
+                    </h5>
+                    <span class="badge bg-light text-dark">{{ order.orderStatus }}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Order Status and Basic Info -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Status:</label>
+                            <span class="badge bg-success">{{ order.orderStatus }}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Channel:</label>
+                            <span>{{ order.channel or 'N/A' }}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Mode:</label>
+                            <span>{{ order.mode or 'N/A' }}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="info-item">
+                            <label>Date:</label>
+                            <span>{{ date }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Location Information -->
+                {% if order.location %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-map-marker-alt me-2"></i>Delivery Location</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Name:</label>
+                                    <span class="fw-bold">{{ order.location.name }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>ID:</label>
+                                    <span>{{ order.location.id }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Status:</label>
+                                    <span class="badge bg-info">{{ order.location.status }}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>City:</label>
+                                    <span>{{ order.location.address.city or 'N/A' }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Country:</label>
+                                    <span>{{ order.location.address.countryCode or 'N/A' }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Coordinates:</label>
+                                    <span>{{ order.location.latLng.lat }}, {{ order.location.latLng.lng }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label>Full Address:</label>
+                            <p class="text-muted">{{ order.location.address.formattedAddress }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Tour/Delivery Information -->
+                {% if order.orderMetadata.tourDetail %}
+                {% set tour = order.orderMetadata.tourDetail %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-truck me-2"></i>Delivery Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="info-item mb-2">
+                                    <label>Rider:</label>
+                                    <span class="fw-bold">{{ tour.riderName }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Phone:</label>
+                                    <span>{{ tour.riderNumber }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Rider ID:</label>
+                                    <span>{{ tour.riderId }}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="info-item mb-2">
+                                    <label>Vehicle:</label>
+                                    <span class="fw-bold">{{ tour.vehicleRegistrationNumber }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Model:</label>
+                                    <span>{{ tour.vehicleModelName or 'N/A' }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Tour ID:</label>
+                                    <span class="small">{{ tour.tourId }}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="info-item mb-2">
+                                    <label>Sequence:</label>
+                                    <span>{{ tour.sequence }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Transporter:</label>
+                                    <span>{{ tour.transporterName }}</span>
+                                </div>
+                                {% if tour.tourStartTime %}
+                                <div class="info-item mb-2">
+                                    <label>Start Time:</label>
+                                    <span>{{ tour.tourStartTime.split('T')[1].split('.')[0] if 'T' in tour.tourStartTime else tour.tourStartTime }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Enhanced Line Items with SKU Details -->
+                {% if order.lineItems %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-list me-2"></i>Order Items ({{ order.lineItems|length }})</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>SKU ID</th>
+                                        <th>Product Name</th>
+                                        <th>Description</th>
+                                        <th>Quantity</th>
+                                        <th>Weight (per unit)</th>
+                                        <th>Volume (per unit)</th>
+                                        <th>Unit</th>
+                                        <th>Handling Unit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in order.lineItems %}
+                                    <tr>
+                                        <td><code>{{ item.id }}</code></td>
+                                        <td><strong>{{ item.name }}</strong></td>
+                                        <td><small class="text-muted">{{ item.description or 'N/A' }}</small></td>
+                                        <td>
+                                            <span class="badge bg-primary">
+                                                {{ item.quantity }} {{ item.quantityUnit }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if item.totalWeight %}
+                                                {{ item.totalWeight.value }}{{ item.totalWeight.unit }}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.totalVolume %}
+                                                {{ item.totalVolume.value }}{{ item.totalVolume.unit }}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ item.quantityUnit }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ item.handlingUnit }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Order Summary -->
+                        <div class="mt-3">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="alert alert-info">
+                                        <strong>Total Weight:</strong><br>
+                                        {{ order.weight.value }}{{ order.weight.unit }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="alert alert-warning">
+                                        <strong>Total Volume:</strong><br>
+                                        {{ order.volume.value }}{{ order.volume.unit }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="alert alert-success">
+                                        <strong>Total Quantity:</strong><br>
+                                        {{ order.quantity.value }} {{ order.quantity.unit }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Transaction Details -->
+                {% if order.orderMetadata.lineItems %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-exchange-alt me-2"></i>Transaction Details ({{ order.orderMetadata.lineItems|length }} items)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>SKU ID</th>
+                                        <th>Ordered</th>
+                                        <th>Delivered</th>
+                                        <th>Weight</th>
+                                        <th>Status</th>
+                                        <th>Delivered At</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in order.orderMetadata.lineItems %}
+                                    <tr>
+                                        <td><code>{{ item.id }}</code></td>
+                                        <td>{{ item.transactionStatus.orderedQuantity }}</td>
+                                        <td>
+                                            <span class="badge bg-primary">
+                                                {{ item.transactionStatus.transactedQuantity }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if item.transactionStatus.transactedWeight %}
+                                                {{ item.transactionStatus.transactedWeight.value }}{{ item.transactionStatus.transactedWeight.unit }}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="badge bg-success">{{ item.transactionStatus.status }}</span></td>
+                                        <td>
+                                            {% if item.transactionStatus.triggerTime %}
+                                                <small>{{ item.transactionStatus.triggerTime.split('T')[1].split('.')[0] if 'T' in item.transactionStatus.triggerTime else item.transactionStatus.triggerTime }}</small>
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Timing Information -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-clock me-2"></i>Timing Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% if order.orderMetadata.homebaseEta %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Homebase ETA:</label>
+                                    <span>{{ order.orderMetadata.homebaseEta.split('T')[1].split('.')[0] if 'T' in order.orderMetadata.homebaseEta else order.orderMetadata.homebaseEta }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.orderMetadata.homebaseEtd %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Homebase ETD:</label>
+                                    <span>{{ order.orderMetadata.homebaseEtd.split('T')[1].split('.')[0] if 'T' in order.orderMetadata.homebaseEtd else order.orderMetadata.homebaseEtd }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.orderMetadata.currentEta %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Current ETA:</label>
+                                    <span>{{ order.orderMetadata.currentEta.split('T')[1].split('.')[0] if 'T' in order.orderMetadata.currentEta else order.orderMetadata.currentEta }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.orderMetadata.homebaseCompleteOn %}
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Completed:</label>
+                                    <span class="text-success fw-bold">{{ order.orderMetadata.homebaseCompleteOn.split('T')[1].split('.')[0] if 'T' in order.orderMetadata.homebaseCompleteOn else order.orderMetadata.homebaseCompleteOn }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Homebase Information -->
+                {% if order.homebase %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-warehouse me-2"></i>Homebase Information</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Name:</label>
+                                    <span class="fw-bold">{{ order.homebase.name }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>ID:</label>
+                                    <span>{{ order.homebase.id }}</span>
+                                </div>
+                                <div class="info-item mb-2">
+                                    <label>Type:</label>
+                                    <span>{{ order.homebase.type }}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="info-item mb-2">
+                                    <label>Status:</label>
+                                    <span class="badge bg-success">{{ order.homebase.status }}</span>
+                                </div>
+                                {% if order.homebase.address %}
+                                <div class="info-item mb-2">
+                                    <label>Address:</label>
+                                    <span>{{ order.homebase.address.formattedAddress }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Proof of Delivery -->
+                {% if order.orderMetadata.customerProofOfCompletion %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-camera me-2"></i>Proof of Delivery</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {% if order.orderMetadata.customerProofOfCompletion["Customer Delivery Photo"] %}
+                            <div class="col-md-4">
+                                <div class="proof-item text-center">
+                                    <h6>Delivery Photo</h6>
+                                    <a href="{{ order.orderMetadata.customerProofOfCompletion['Customer Delivery Photo']['Customer Delivery Photo'] }}" target="_blank" class="btn btn-outline-primary">
+                                        <i class="fas fa-camera me-1"></i>View Photo
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.orderMetadata.customerProofOfCompletion["Customer Confirmation Signature"] %}
+                            <div class="col-md-4">
+                                <div class="proof-item text-center">
+                                    <h6>Customer Signature</h6>
+                                    <a href="{{ order.orderMetadata.customerProofOfCompletion['Customer Confirmation Signature']['Customer Confirmation Signature'] }}" target="_blank" class="btn btn-outline-success">
+                                        <i class="fas fa-signature me-1"></i>View Signature
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if order.orderMetadata.customerProofOfCompletion["Proof Of Delivery Document"] %}
+                            <div class="col-md-4">
+                                <div class="proof-item text-center">
+                                    <h6>Delivery Document</h6>
+                                    <a href="{{ order.orderMetadata.customerProofOfCompletion['Proof Of Delivery Document']['Proof Of Delivery Document'] }}" target="_blank" class="btn btn-outline-warning">
+                                        <i class="fas fa-file-pdf me-1"></i>View Document
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Order Timeline -->
+                {% if order.timeline %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6><i class="fas fa-clock me-2"></i>Order Timeline</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline">
+                            {% for event in order.timeline[-10:] %}
+                            <div class="timeline-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ event.type.replace('_', ' ').title() }}</strong>
+                                        {% if event.orderStatus %}
+                                            <span class="badge bg-primary ms-2">{{ event.orderStatus }}</span>
+                                        {% endif %}
+                                        {% if event.orderSubStatus %}
+                                            <span class="badge bg-secondary ms-1">{{ event.orderSubStatus }}</span>
+                                        {% endif %}
+                                        <br>
+                                        {% if event.updatedBy %}
+                                            <small class="text-muted">by {{ event.updatedBy }}</small>
+                                        {% endif %}
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ event.eventTimestamp.split('T')[0] if 'T' in event.eventTimestamp else event.eventTimestamp[:10] }}<br>
+                                        {{ event.eventTimestamp.split('T')[1].split('.')[0] if 'T' in event.eventTimestamp else event.eventTimestamp[11:19] }}
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% if order.timeline|length > 10 %}
+                        <small class="text-muted">Showing last 10 events of {{ order.timeline|length }} total events</small>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Raw JSON Data -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="fas fa-code me-2"></i>Complete Order Data (JSON)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="order-details-container">
+                            <pre class="order-json">{{ order | tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.info-item {
+    margin-bottom: 8px;
+}
+
+.info-item label {
+    font-weight: 600;
+    color: #6c757d;
+    display: inline-block;
+    min-width: 100px;
+}
+
+.clickable-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.clickable-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+}
+
+.order-json {
+    font-size: 11px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border-radius: 5px;
+    padding: 15px;
+}
+</style>
+
+<script>
+// Function to validate order GRN
+async function validateOrder(orderId, date) {
+    const statusDiv = document.getElementById('validation-status');
+    const button = document.getElementById('validate-order-btn');
+
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Validating...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-1"></i>Processing validation...</div>';
+
+    try {
+        const response = await fetch(`/validate-order/${orderId}?date=${date}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (result.is_valid) {
+                statusDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-check-circle me-2"></i>Validation Successful!</h5>
+                        <p class="mb-0">The GRN document matches the order data perfectly. All items and quantities are correct.</p>
+                        ${result.confidence_score ? `<small class="text-muted">Confidence Score: ${Math.round(result.confidence_score * 100)}%</small>` : ''}
+                    </div>
+                `;
+            } else {
+                const discrepancies = result.discrepancies.map(d =>
+                    `<li><strong>${d.type}:</strong> ${d.description}
+                        ${d.expected ? `<br><small class="text-muted">Expected: ${d.expected}</small>` : ''}
+                        ${d.actual ? `<br><small class="text-muted">Actual: ${d.actual}</small>` : ''}
+                    </li>`
+                ).join('');
+
+                const summary = result.summary || {};
+                const recommendations = result.validation_data?.recommendations || [];
+                const fallbackNote = result.fallback ? `<div class="alert alert-info mb-3"><i class="fas fa-info-circle me-1"></i>Note: This is a partial analysis due to response processing issues. Some details may be incomplete.</div>` : '';
+
+                statusDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-exclamation-triangle me-2"></i>Validation Failed!</h5>
+                        ${fallbackNote}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <strong>Summary:</strong>
+                                <ul class="mb-0">
+                                    <li>Items Expected: ${summary.total_items_expected || 'Unknown'}</li>
+                                    <li>Items Found: ${summary.total_items_found || 'Unknown'}</li>
+                                    <li>Items Matched: ${summary.items_matched || 0}</li>
+                                    <li>Items with Issues: ${summary.items_with_discrepancies || 0}</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                ${result.confidence_score ? `<strong>Confidence Score:</strong> ${Math.round(result.confidence_score * 100)}%` : ''}
+                            </div>
+                        </div>
+                        ${discrepancies.length > 0 ? `
+                            <p><strong>Issues Found:</strong></p>
+                            <ul class="mb-2">${discrepancies}</ul>
+                        ` : '<p class="text-muted">Specific discrepancies could not be determined from the partial response.</p>'}
+                        ${result.gtin_verification && result.gtin_verification.length > 0 ? `
+                            <div class="mt-3">
+                                <p><strong>GTIN Verification Results:</strong></p>
+                                <div class="row">
+                                    ${result.gtin_verification.map(gtin => `
+                                        <div class="col-md-6 mb-2">
+                                            <div class="card ${gtin.gs1_verified ? (gtin.name_match ? 'border-success' : 'border-warning') : 'border-danger'}">
+                                                <div class="card-body p-2">
+                                                    <h6 class="card-title mb-1">
+                                                        <span class="badge ${gtin.gs1_verified ? (gtin.name_match ? 'bg-success' : 'bg-warning') : 'bg-danger'}">
+                                                            ${gtin.gs1_verified ? (gtin.name_match ? '✓' : '⚠') : '✗'}
+                                                        </span>
+                                                        GTIN: ${gtin.gtin}
+                                                    </h6>
+                                                    <p class="card-text small mb-1">
+                                                        <strong>Document:</strong> ${gtin.extracted_name}<br>
+                                                        ${gtin.gs1_product_info ? `
+                                                            <strong>GS1 Verified:</strong> ${gtin.gs1_product_info.product_name}<br>
+                                                            <strong>Brand:</strong> ${gtin.gs1_product_info.brand_name || 'N/A'}<br>
+                                                            <strong>Company:</strong> ${gtin.gs1_product_info.company_name || 'N/A'}
+                                                        ` : '<strong>GS1 Status:</strong> Not found in registry'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        ${recommendations.length > 0 ? `
+                            <p><strong>Recommendations:</strong></p>
+                            <ul class="mb-2">
+                                ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                            </ul>
+                        ` : ''}
+                        <p class="mb-0"><small class="text-muted">Please review the delivery document and order details carefully.</small></p>
+                    </div>
+                `;
+            }
+        } else {
+            statusDiv.innerHTML = `
+                <div class="alert alert-warning">
+                    <h5><i class="fas fa-exclamation-circle me-2"></i>Validation Error</h5>
+                    <p class="mb-0">${result.error || result.message || 'Unknown error occurred'}</p>
+                    ${result.ai_response ? `<p class="mb-0"><small class="text-muted">AI response was received but could not be processed properly.</small></p>` : ''}
+                </div>
+            `;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-times-circle me-2"></i>Error</h5>
+                <p class="mb-0">Failed to validate order. Please try again or contact support if the issue persists.</p>
+            </div>
+        `;
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-check-circle me-1"></i>Validate GRN';
+    }
+}
+
+// Event listener for validation button
+document.addEventListener('DOMContentLoaded', function() {
+    const validateBtn = document.getElementById('validate-order-btn');
+    if (validateBtn) {
+        validateBtn.addEventListener('click', function() {
+            const orderId = this.getAttribute('data-order-id');
+            const date = this.getAttribute('data-date');
+            validateOrder(orderId, date);
+        });
+    }
+});
+</script>
+{% endblock %}

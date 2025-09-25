@@ -1,0 +1,794 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Locus Assistant{% endblock %}
+
+{% block content %}
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h2><i class="fas fa-tachometer-alt me-2"></i>Orders Dashboard</h2>
+        {% if orders_data.pagesFetched %}
+            <span class="badge bg-info ms-2">
+                <i class="fas fa-layers me-1"></i>{{ orders_data.pagesFetched }} pages fetched
+            </span>
+        {% endif %}
+    </div>
+    <div class="col-md-6 text-end">
+        <div class="mb-2">
+            <form method="GET" class="d-inline-flex">
+                <input type="date" name="date" value="{{ selected_date }}" class="form-control me-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>Filter
+                </button>
+            </form>
+        </div>
+        <div class="mb-2">
+            <div class="d-inline-flex">
+                <input type="text" id="orderSearch" placeholder="Search Order ID..." class="form-control me-2" style="width: 200px;">
+                <button type="button" class="btn btn-outline-secondary" onclick="clearSearch()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <select id="issueFilter" class="form-select ms-2" style="width: 180px;" onchange="filterByIssues()">
+                <option value="all">All Orders</option>
+                <option value="no-validation">Not Validated</option>
+                <option value="valid">Valid Orders</option>
+                <option value="invalid">Invalid Orders</option>
+                <option value="no-document">No Document</option>
+                <option value="missing-items">Missing Items</option>
+                <option value="extra-items">Extra Items</option>
+                <option value="quantity-issues">Quantity Issues</option>
+                <option value="gtin-issues">GTIN Issues</option>
+            </select>
+        </div>
+        {% if orders_data and orders_data.orders %}
+            <button class="btn btn-warning ms-2" id="validate-all-btn">
+                <i class="fas fa-tasks me-1"></i>Validate All Orders
+            </button>
+        {% endif %}
+    </div>
+</div>
+
+{% if orders_data and orders_data.orders %}
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Found <strong>{{ orders_data.orders|length }}</strong> completed orders for {{ selected_date }}
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for order in orders_data.orders %}
+            <div class="col-lg-6 mb-4">
+                <div class="card order-card h-100 clickable-card" onclick="viewOrderDetail('{{ order.id if order.id else loop.index0 }}', '{{ selected_date }}')">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-box me-1"></i>
+                            Order #{{ loop.index }}
+                            <span class="badge bg-primary ms-2">{{ order.id }}</span>
+                        </h6>
+                        <div>
+                            <span class="badge bg-success">{{ order.orderStatus }}</span>
+                            {% if order.validation_summary %}
+                                {% if order.validation_summary.has_validation %}
+                                    {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
+                                        <span class="badge bg-warning ms-1" title="No document detected in GRN image">
+                                            <i class="fas fa-file-times me-1"></i>No Doc
+                                        </span>
+                                    {% elif order.validation_summary.is_valid %}
+                                        <span class="badge bg-success ms-1" title="GRN validation passed">
+                                            <i class="fas fa-check-circle me-1"></i>Valid
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger ms-1" title="GRN validation failed">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Issues: {{ order.validation_summary.discrepancies_count }}
+                                        </span>
+                                        {% if order.validation_summary.summary.missing_items and order.validation_summary.summary.missing_items > 0 %}
+                                            <span class="badge bg-warning ms-1" title="Missing items detected">
+                                                <i class="fas fa-minus-circle me-1"></i>-{{ order.validation_summary.summary.missing_items }}
+                                            </span>
+                                        {% endif %}
+                                        {% if order.validation_summary.summary.extra_items and order.validation_summary.summary.extra_items > 0 %}
+                                            <span class="badge bg-info ms-1" title="Extra items detected">
+                                                <i class="fas fa-plus-circle me-1"></i>+{{ order.validation_summary.summary.extra_items }}
+                                            </span>
+                                        {% endif %}
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary ms-1" title="GRN not validated yet">
+                                        <i class="fas fa-question me-1"></i>Unvalidated
+                                    </span>
+                                {% endif %}
+                            {% endif %}
+                            <i class="fas fa-external-link-alt ms-2 text-light" title="Click to view details"></i>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Location Info -->
+                        {% if order.location %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-map-marker-alt me-1"></i>Delivery Location</h6>
+                                <p class="mb-1"><strong>{{ order.location.name }}</strong></p>
+                                <p class="text-muted small mb-2">{{ order.location.address.formattedAddress }}</p>
+                                <div class="d-flex text-small">
+                                    <span class="badge bg-light text-dark me-2">
+                                        <i class="fas fa-globe me-1"></i>{{ order.location.address.city or 'N/A' }}
+                                    </span>
+                                    <span class="badge bg-light text-dark">
+                                        <i class="fas fa-flag me-1"></i>{{ order.location.address.countryCode }}
+                                    </span>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Tour Details -->
+                        {% if order.orderMetadata.tourDetail %}
+                            {% set tour = order.orderMetadata.tourDetail %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-truck me-1"></i>Delivery Info</h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">Rider:</small><br>
+                                        <strong>{{ tour.riderName }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Vehicle:</small><br>
+                                        <strong>{{ tour.vehicleRegistrationNumber }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Line Items Summary -->
+                        {% if order.orderMetadata.lineItems %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-list me-1"></i>Items ({{ order.orderMetadata.lineItems|length }})</h6>
+                                <div class="line-items-summary">
+                                    {% for item in order.orderMetadata.lineItems[:3] %}
+                                        <div class="d-flex justify-content-between align-items-center py-1">
+                                            <span class="small">{{ item.id }}</span>
+                                            <span class="badge bg-secondary">{{ item.transactionStatus.transactedQuantity }}x</span>
+                                        </div>
+                                    {% endfor %}
+                                    {% if order.orderMetadata.lineItems|length > 3 %}
+                                        <div class="text-center mt-2">
+                                            <small class="text-muted">+ {{ order.orderMetadata.lineItems|length - 3 }} more items</small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Validation Summary -->
+                        {% if order.validation_summary %}
+                            <div class="mb-3">
+                                <h6><i class="fas fa-clipboard-check me-1"></i>GRN Validation</h6>
+                                {% if order.validation_summary.has_validation %}
+                                    <div class="validation-summary-card p-2 border rounded">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            {% if order.validation_summary.is_valid %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check-circle me-1"></i>Valid
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>Invalid
+                                                </span>
+                                            {% endif %}
+                                            <small class="text-muted">
+                                                {{ "%.0f"|format(order.validation_summary.confidence_score * 100) }}% confidence
+                                            </small>
+                                        </div>
+
+                                        {% if order.validation_summary.has_document is defined and order.validation_summary.has_document == false %}
+                                            <div class="alert alert-warning alert-sm p-2 mb-2">
+                                                <i class="fas fa-file-times me-1"></i>No document detected in GRN image
+                                            </div>
+                                        {% endif %}
+
+                                        <div class="row small">
+                                            <div class="col-6">
+                                                <strong>Items:</strong> {{ order.validation_summary.summary.total_items_found or 'N/A' }}
+                                            </div>
+                                            <div class="col-6">
+                                                <strong>Issues:</strong> {{ order.validation_summary.discrepancies_count }}
+                                            </div>
+                                        </div>
+
+                                        {% if order.validation_summary.gtins_verified %}
+                                            <div class="row small mt-1">
+                                                <div class="col-12">
+                                                    <strong>GTINs:</strong> {{ order.validation_summary.gtins_matched }}/{{ order.validation_summary.gtins_verified }} matched
+                                                </div>
+                                            </div>
+                                        {% endif %}
+
+                                        <div class="mt-2 small text-muted">
+                                            <i class="fas fa-clock me-1"></i>
+                                            Processed: {{ order.validation_summary.validation_date.split('T')[0] if order.validation_summary.validation_date else 'N/A' }}
+                                            ({{ "%.2f"|format(order.validation_summary.processing_time) }}s)
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="text-center py-2">
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-question me-1"></i>Not Validated
+                                        </span>
+                                        <p class="small text-muted mt-1 mb-0">GRN not processed yet</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
+                        <!-- Time Info -->
+                        {% if order.orderMetadata.homebaseCompleteOn %}
+                            <div class="mb-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>Completed:
+                                    {{ order.orderMetadata.homebaseCompleteOn.split('T')[0] }}
+                                    {{ order.orderMetadata.homebaseCompleteOn.split('T')[1].split('.')[0] }}
+                                </small>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <button class="btn btn-sm btn-outline-primary"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#order-details-{{ loop.index }}"
+                                onclick="event.stopPropagation();">
+                            <i class="fas fa-eye me-1"></i>View Details
+                        </button>
+                        <div class="validation-section">
+                            {% if order.validation_summary and order.validation_summary.has_validation %}
+                                <button class="btn btn-sm btn-warning reprocess-order-btn"
+                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                        data-date="{{ selected_date }}"
+                                        title="Re-process GRN with AI"
+                                        onclick="event.stopPropagation();">
+                                    <i class="fas fa-redo me-1"></i>Re-process
+                                </button>
+                            {% else %}
+                                <button class="btn btn-sm btn-success validate-order-btn"
+                                        data-order-id="{{ order.id if order.id else loop.index0 }}"
+                                        data-date="{{ selected_date }}"
+                                        onclick="event.stopPropagation();">
+                                    <i class="fas fa-check-circle me-1"></i>Validate GRN
+                                </button>
+                            {% endif %}
+                            <div class="validation-status mt-2" id="validation-status-{{ order.id if order.id else loop.index0 }}" style="display: none;">
+                                <!-- Validation results will be displayed here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Details -->
+                    <div class="collapse" id="order-details-{{ loop.index }}">
+                        <div class="card-body border-top">
+                            <h6>Complete Order Details</h6>
+                            <div class="order-details-container">
+                                <pre class="order-json">{{ order | tojson(indent=2) }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                <h4>No Orders Found</h4>
+                <p class="text-muted">No completed orders found for {{ selected_date }}. Try selecting a different date.</p>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Function to view order details
+function viewOrderDetail(orderId, date) {
+    window.location.href = `/order/${orderId}?date=${date}`;
+}
+
+// Function to re-process order (force reprocess)
+async function reprocessOrder(orderId, date) {
+    const statusDiv = document.getElementById(`validation-status-${orderId}`);
+    const button = document.querySelector(`[data-order-id="${orderId}"].reprocess-order-btn`);
+
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Re-processing...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Re-processing with AI...</div>';
+
+    try {
+        const response = await fetch(`/validate-order/${orderId}?date=${date}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                force_reprocess: true
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (result.is_valid) {
+                statusDiv.innerHTML = `
+                    <div class="alert alert-success alert-sm">
+                        <i class="fas fa-check-circle me-1"></i>
+                        <strong>Re-processed!</strong> GRN validation updated.
+                        ${result.cached ? '<small class="text-info">(Previously processed result)</small>' : '<small class="text-success">(Freshly processed)</small>'}
+                    </div>
+                `;
+            } else {
+                const discrepancies = result.discrepancies.map(d =>
+                    `<li><strong>${d.type}:</strong> ${d.description}</li>`
+                ).join('');
+
+                statusDiv.innerHTML = `
+                    <div class="alert alert-danger alert-sm">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <strong>Re-processed - Issues Found!</strong>
+                        ${discrepancies.length > 0 ? `<ul class="mb-0 mt-2">${discrepancies}</ul>` : ''}
+                        ${result.confidence_score ? `<small class="text-muted">Confidence: ${Math.round(result.confidence_score * 100)}%</small>` : ''}
+                    </div>
+                `;
+            }
+
+            // Refresh page after 2 seconds to show updated summary
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            statusDiv.innerHTML = `
+                <div class="alert alert-warning alert-sm">
+                    <i class="fas fa-exclamation-circle me-1"></i>
+                    <strong>Re-processing Error:</strong> ${result.error || result.message || 'Unknown error occurred'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger alert-sm">
+                <i class="fas fa-times-circle me-1"></i>
+                <strong>Error:</strong> Failed to re-process order. Please try again.
+            </div>
+        `;
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-redo me-1"></i>Re-process';
+    }
+}
+
+// Function to validate single order
+async function validateOrder(orderId, date) {
+    const statusDiv = document.getElementById(`validation-status-${orderId}`);
+    const button = document.querySelector(`[data-order-id="${orderId}"]`);
+
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Validating...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Processing validation...</div>';
+
+    try {
+        const response = await fetch(`/validate-order/${orderId}?date=${date}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (result.is_valid) {
+                statusDiv.innerHTML = `
+                    <div class="alert alert-success alert-sm">
+                        <i class="fas fa-check-circle me-1"></i>
+                        <strong>Validated!</strong> GRN matches order data perfectly.
+                    </div>
+                `;
+            } else {
+                const discrepancies = result.discrepancies.map(d =>
+                    `<li><strong>${d.type}:</strong> ${d.description}</li>`
+                ).join('');
+
+                const summary = result.summary || {};
+                const fallbackNote = result.fallback ? `<small class="text-info"><i class="fas fa-info-circle me-1"></i>Partial analysis due to processing issues</small><br>` : '';
+                const gtinInfo = summary.gtins_verified ? `<br><small class="text-info">GTINs verified: ${summary.gtins_verified}/${summary.gtins_extracted || 0} | Matched: ${summary.gtins_matched || 0}</small>` : '';
+
+                statusDiv.innerHTML = `
+                    <div class="alert alert-danger alert-sm">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        <strong>Validation Failed!</strong>
+                        ${fallbackNote}
+                        <p class="small mb-1">Found ${summary.total_items_found || 'unknown'} items, expected ${summary.total_items_expected || 'unknown'}. Matched: ${summary.items_matched || 0}</p>
+                        ${discrepancies.length > 0 ? `<ul class="mb-0 mt-2">${discrepancies}</ul>` : '<p class="small text-muted">Specific discrepancies could not be determined</p>'}
+                        ${result.confidence_score ? `<small class="text-muted">Confidence: ${Math.round(result.confidence_score * 100)}%</small>` : ''}${gtinInfo}
+                    </div>
+                `;
+            }
+        } else {
+            statusDiv.innerHTML = `
+                <div class="alert alert-warning alert-sm">
+                    <i class="fas fa-exclamation-circle me-1"></i>
+                    <strong>Validation Error:</strong> ${result.error || result.message || 'Unknown error occurred'}
+                    ${result.ai_response ? `<br><small class="text-muted">AI response was received but could not be processed</small>` : ''}
+                </div>
+            `;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger alert-sm">
+                <i class="fas fa-times-circle me-1"></i>
+                <strong>Error:</strong> Failed to validate order. Please try again.
+            </div>
+        `;
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-check-circle me-1"></i>Validate GRN';
+    }
+}
+
+// Function to validate all orders
+async function validateAllOrders() {
+    const button = document.getElementById('validate-all-btn');
+    const date = '{{ selected_date }}';
+
+    // Ask user for validation mode to optimize API costs
+    const validationOptions = [
+        "1 - Validate only unvalidated orders (Cost-Effective - Recommended)",
+        "2 - Validate all orders (Force reprocess all - Higher API cost)"
+    ];
+
+    const modeChoice = prompt(`Choose validation mode to manage Google API costs:\\n\\n${validationOptions.join('\\n')}\\n\\nEnter 1 or 2:`);
+    if (!modeChoice || modeChoice === 'cancel') return;
+
+    const validateMode = modeChoice === '2' ? 'all' : 'unvalidated_only';
+    const forceReprocess = modeChoice === '2';
+
+    // Get thread count from user (default 20)
+    const threadCount = prompt('Enter number of threads for parallel processing (1-50):', '20');
+    if (!threadCount || threadCount === 'cancel') return;
+
+    const maxWorkers = Math.min(Math.max(parseInt(threadCount) || 20, 1), 50);
+
+    // Show loading state with mode info
+    const modeText = validateMode === 'all' ? 'All Orders' : 'Unvalidated Only (Cost-Optimized)';
+    button.disabled = true;
+    button.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>Validating ${modeText} (${maxWorkers} threads)...`;
+
+    try {
+        const response = await fetch(`/validate-all-orders?date=${date}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                max_workers: maxWorkers,
+                validate_mode: validateMode,
+                force_reprocess: forceReprocess
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update individual order status displays
+            result.results.forEach(orderResult => {
+                const statusDiv = document.getElementById(`validation-status-${orderResult.order_id}`);
+                if (statusDiv) {
+                    statusDiv.style.display = 'block';
+
+                    if (orderResult.is_valid) {
+                        statusDiv.innerHTML = `
+                            <div class="alert alert-success alert-sm">
+                                <i class="fas fa-check-circle me-1"></i>
+                                <strong>Validated!</strong> GRN matches order data.
+                            </div>
+                        `;
+                    } else if (orderResult.discrepancies) {
+                        const discrepancies = orderResult.discrepancies.map(d =>
+                            `<li><strong>${d.type}:</strong> ${d.description}</li>`
+                        ).join('');
+
+                        statusDiv.innerHTML = `
+                            <div class="alert alert-danger alert-sm">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <strong>Issues Found!</strong>
+                                <ul class="mb-0 mt-2">${discrepancies}</ul>
+                            </div>
+                        `;
+                    } else {
+                        statusDiv.innerHTML = `
+                            <div class="alert alert-warning alert-sm">
+                                <i class="fas fa-exclamation-circle me-1"></i>
+                                <strong>Validation Error:</strong> ${orderResult.message || 'Unknown error'}
+                            </div>
+                        `;
+                    }
+                }
+            });
+
+            // Show summary with cost optimization info
+            const validCount = result.results.filter(r => r.is_valid).length;
+            const totalCount = result.results.length;
+            const threadsUsed = result.threads_used || maxWorkers;
+            const apiCalls = result.api_calls_made || 0;
+            const cachedResults = result.cached_results || 0;
+            const skippedOrders = result.skipped || 0;
+
+            let summaryMessage = `Batch validation completed!\n✅ Valid orders: ${validCount}/${totalCount}\n❌ Invalid orders: ${totalCount - validCount}`;
+
+            if (result.validate_mode === 'unvalidated_only' || apiCalls < result.total_orders) {
+                summaryMessage += `\n\n💰 Cost Optimization:\n📞 API calls made: ${apiCalls}\n💾 From cache: ${cachedResults}\n⏭️ Skipped (already validated): ${skippedOrders}`;
+            }
+
+            summaryMessage += `\n\n🧵 Threads used: ${threadsUsed}\n⚡ Mode: ${result.validate_mode === 'all' ? 'All Orders' : 'Unvalidated Only'}`;
+
+            if (result.message) {
+                summaryMessage = result.message + '\n\n' + summaryMessage;
+            }
+
+            alert(summaryMessage);
+        } else {
+            alert(`Batch validation failed: ${result.message}`);
+        }
+    } catch (error) {
+        alert('Error during batch validation. Please try again.');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-tasks me-1"></i>Validate All Orders';
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Individual validation buttons
+    document.querySelectorAll('.validate-order-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.getAttribute('data-order-id');
+            const date = this.getAttribute('data-date');
+            validateOrder(orderId, date);
+        });
+    });
+
+    // Re-process buttons
+    document.querySelectorAll('.reprocess-order-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const orderId = this.getAttribute('data-order-id');
+            const date = this.getAttribute('data-date');
+            reprocessOrder(orderId, date);
+        });
+    });
+
+    // Batch validation button
+    const validateAllBtn = document.getElementById('validate-all-btn');
+    if (validateAllBtn) {
+        validateAllBtn.addEventListener('click', validateAllOrders);
+    }
+
+    // Initialize order search functionality
+    setupOrderSearch();
+});
+
+// Auto-refresh every 30 seconds (disabled during validation)
+setInterval(function() {
+    if (!document.querySelector('.collapse.show') && !document.querySelector('button:disabled')) {
+        location.reload();
+    }
+}, 30000);
+
+// Order ID search functionality
+function setupOrderSearch() {
+    const searchInput = document.getElementById('orderSearch');
+    const orderCards = document.querySelectorAll('.order-card');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+
+            orderCards.forEach(card => {
+                const orderIdBadge = card.querySelector('.badge.bg-primary');
+                const orderHeader = card.querySelector('.card-header h6');
+
+                if (searchTerm === '') {
+                    // Show all cards when search is empty
+                    card.parentElement.style.display = 'block';
+                } else {
+                    // Check if search term matches order ID or order number
+                    let matches = false;
+
+                    if (orderIdBadge) {
+                        const orderId = orderIdBadge.textContent.toLowerCase();
+                        if (orderId.includes(searchTerm)) {
+                            matches = true;
+                        }
+                    }
+
+                    if (orderHeader) {
+                        const headerText = orderHeader.textContent.toLowerCase();
+                        if (headerText.includes(searchTerm)) {
+                            matches = true;
+                        }
+                    }
+
+                    // Show/hide card based on match
+                    card.parentElement.style.display = matches ? 'block' : 'none';
+                }
+            });
+        });
+    }
+}
+
+function clearSearch() {
+    const searchInput = document.getElementById('orderSearch');
+    const issueFilter = document.getElementById('issueFilter');
+    const orderCards = document.querySelectorAll('.order-card');
+
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    if (issueFilter) {
+        issueFilter.value = 'all';
+    }
+
+    // Show all cards
+    orderCards.forEach(card => {
+        card.parentElement.style.display = 'block';
+        card.parentElement.classList.remove('filtered-out');
+    });
+}
+
+function filterByIssues() {
+    const filterValue = document.getElementById('issueFilter').value;
+    const orderCards = document.querySelectorAll('.order-card');
+    let visibleCount = 0;
+
+    orderCards.forEach(card => {
+        const cardContainer = card.parentElement;
+        let shouldShow = false;
+
+        // Get validation badges from the card
+        const validBadge = card.querySelector('.badge:contains("Valid")') || card.querySelector('.badge .fa-check-circle');
+        const issuesBadge = card.querySelector('.badge:contains("Issues")') || card.querySelector('.badge .fa-exclamation-triangle');
+        const noDocBadge = card.querySelector('.badge:contains("No Doc")') || card.querySelector('.badge .fa-file-times');
+        const unvalidatedBadge = card.querySelector('.badge:contains("Unvalidated")') || card.querySelector('.badge .fa-question');
+        const missingItemsBadge = card.querySelector('.badge .fa-minus-circle');
+        const extraItemsBadge = card.querySelector('.badge .fa-plus-circle');
+
+        // Parse validation summary for more detailed filtering
+        const validationSummary = card.querySelector('.validation-summary-card');
+        let hasQuantityIssues = false;
+        let hasGtinIssues = false;
+
+        if (validationSummary) {
+            const summaryText = validationSummary.textContent.toLowerCase();
+            hasQuantityIssues = summaryText.includes('quantity') || summaryText.includes('mismatch');
+            hasGtinIssues = summaryText.includes('gtin') || summaryText.includes('barcode');
+        }
+
+        // Apply filter logic
+        switch (filterValue) {
+            case 'all':
+                shouldShow = true;
+                break;
+            case 'no-validation':
+                shouldShow = unvalidatedBadge !== null;
+                break;
+            case 'valid':
+                shouldShow = validBadge !== null;
+                break;
+            case 'invalid':
+                shouldShow = issuesBadge !== null;
+                break;
+            case 'no-document':
+                shouldShow = noDocBadge !== null;
+                break;
+            case 'missing-items':
+                shouldShow = missingItemsBadge !== null;
+                break;
+            case 'extra-items':
+                shouldShow = extraItemsBadge !== null;
+                break;
+            case 'quantity-issues':
+                shouldShow = hasQuantityIssues;
+                break;
+            case 'gtin-issues':
+                shouldShow = hasGtinIssues;
+                break;
+        }
+
+        // Show/hide based on filter
+        if (shouldShow) {
+            cardContainer.style.display = 'block';
+            cardContainer.classList.remove('filtered-out');
+            visibleCount++;
+        } else {
+            cardContainer.style.display = 'none';
+            cardContainer.classList.add('filtered-out');
+        }
+    });
+
+    // Update filter count indicator
+    updateFilterCount(visibleCount, orderCards.length, filterValue);
+}
+
+function updateFilterCount(visible, total, filterType) {
+    // Remove existing filter count indicator
+    const existingIndicator = document.querySelector('.filter-count-indicator');
+    if (existingIndicator) {
+        existingIndicator.remove();
+    }
+
+    if (filterType !== 'all' && visible < total) {
+        // Add new filter count indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'alert alert-info filter-count-indicator mt-2';
+        indicator.innerHTML = `
+            <i class="fas fa-filter me-2"></i>
+            Showing <strong>${visible}</strong> of <strong>${total}</strong> orders matching filter: <strong>${getFilterDisplayName(filterType)}</strong>
+            <button type="button" class="btn btn-sm btn-outline-info ms-2" onclick="clearFilters()">
+                <i class="fas fa-times"></i> Clear Filter
+            </button>
+        `;
+
+        // Insert after the main info alert
+        const infoAlert = document.querySelector('.alert.alert-info');
+        if (infoAlert) {
+            infoAlert.parentNode.insertBefore(indicator, infoAlert.nextSibling);
+        }
+    }
+}
+
+function getFilterDisplayName(filterValue) {
+    const filterNames = {
+        'no-validation': 'Not Validated',
+        'valid': 'Valid Orders',
+        'invalid': 'Invalid Orders',
+        'no-document': 'No Document',
+        'missing-items': 'Missing Items',
+        'extra-items': 'Extra Items',
+        'quantity-issues': 'Quantity Issues',
+        'gtin-issues': 'GTIN Issues'
+    };
+    return filterNames[filterValue] || filterValue;
+}
+
+function clearFilters() {
+    document.getElementById('issueFilter').value = 'all';
+    filterByIssues();
+}
+
+// Format JSON in details
+document.querySelectorAll('.order-json').forEach(function(element) {
+    try {
+        const json = JSON.parse(element.textContent);
+        element.textContent = JSON.stringify(json, null, 2);
+    } catch (e) {
+        // Already formatted
+    }
+});
+</script>
+{% endblock %}

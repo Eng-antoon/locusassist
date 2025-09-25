@@ -1,0 +1,227 @@
+/* Custom styles for Locus Assistant */
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.feature-box {
+    padding: 20px;
+    text-align: center;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    transition: transform 0.2s;
+}
+
+.feature-box:hover {
+    transform: translateY(-2px);
+}
+
+.order-card {
+    border: none;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.order-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+}
+
+.clickable-card {
+    cursor: pointer;
+}
+
+.clickable-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+.info-item {
+    margin-bottom: 8px;
+}
+
+.info-item label {
+    font-weight: 600;
+    color: #6c757d;
+    display: inline-block;
+    min-width: 100px;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-bottom: none;
+}
+
+.line-items-summary {
+    max-height: 120px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.order-details-container {
+    max-height: 400px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+.order-json {
+    font-size: 11px;
+    color: #495057;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.alert {
+    border: none;
+    border-radius: 8px;
+}
+
+.alert-sm {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.validation-section {
+    text-align: right;
+}
+
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.card {
+    border-radius: 10px;
+}
+
+.form-control {
+    border-radius: 6px;
+}
+
+/* Loading animation */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+
+    .order-card {
+        margin-bottom: 20px;
+    }
+
+    .feature-box {
+        margin-bottom: 15px;
+    }
+
+    .order-json {
+        font-size: 10px;
+    }
+}
+
+/* Status badges */
+.status-completed {
+    background: linear-gradient(45deg, #28a745, #20c997);
+}
+
+.status-pending {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+}
+
+.status-cancelled {
+    background: linear-gradient(45deg, #dc3545, #c82333);
+}
+
+/* Timeline styles */
+.timeline-item {
+    border-left: 3px solid #007bff;
+    padding-left: 15px;
+    margin-bottom: 15px;
+    position: relative;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 5px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #007bff;
+}
+
+.proof-item {
+    padding: 15px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.proof-item h6 {
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+/* Custom scrollbar */
+.order-details-container::-webkit-scrollbar,
+.line-items-summary::-webkit-scrollbar {
+    width: 6px;
+}
+
+.order-details-container::-webkit-scrollbar-track,
+.line-items-summary::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.order-details-container::-webkit-scrollbar-thumb,
+.line-items-summary::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.order-details-container::-webkit-scrollbar-thumb:hover,
+.line-items-summary::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Animation for page transitions */
+.container {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
