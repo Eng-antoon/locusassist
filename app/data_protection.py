@@ -127,6 +127,16 @@ class DataProtectionService:
                 elif self.is_field_modified(existing_order, attr_name):
                     logger.debug(f"Protected field '{attr_name}' from API update for order {existing_order.id}")
 
+            # For manually modified orders, recalculate partial delivery based on local transaction data
+            if existing_order.is_modified:
+                from app.editing_routes import EditingService
+                editing_service = EditingService()
+                calculated_partial_status = editing_service.calculate_partial_delivery(existing_order)
+
+                if existing_order.partially_delivered != calculated_partial_status:
+                    existing_order.partially_delivered = calculated_partial_status
+                    logger.info(f"Recalculated partial delivery for modified order {existing_order.id}: {calculated_partial_status}")
+
             # Handle JSON fields with protection
             json_field_mappings = {
                 'skills': 'skills',

@@ -29,6 +29,49 @@ class EditingService:
             logger.warning(f"Failed to invalidate filter cache: {e}")
             # Not critical - continue without error
 
+    def calculate_partial_delivery(self, order):
+        """Calculate if order is partially delivered based on transaction quantities"""
+        try:
+            # Get all line items for this order
+            line_items = OrderLineItem.query.filter_by(order_id=order.id).all()
+
+            if not line_items:
+                return False
+
+            total_fully_delivered = 0
+            total_items = len(line_items)
+
+            for item in line_items:
+                ordered_qty = item.quantity or 0
+                transacted_qty = item.transacted_quantity or 0
+
+                # Consider item fully delivered if transacted >= ordered
+                if transacted_qty >= ordered_qty:
+                    total_fully_delivered += 1
+
+            # Order is partially delivered if some but not all items are fully delivered
+            # OR if no items are fully delivered but some have partial quantities
+            is_partially_delivered = False
+
+            if total_fully_delivered > 0 and total_fully_delivered < total_items:
+                # Some items fully delivered, some not
+                is_partially_delivered = True
+            elif total_fully_delivered == 0:
+                # Check if any item has partial delivery (transacted > 0 but < ordered)
+                for item in line_items:
+                    ordered_qty = item.quantity or 0
+                    transacted_qty = item.transacted_quantity or 0
+                    if transacted_qty > 0 and transacted_qty < ordered_qty:
+                        is_partially_delivered = True
+                        break
+
+            logger.info(f"Order {order.id}: {total_fully_delivered}/{total_items} items fully delivered, partially_delivered = {is_partially_delivered}")
+            return is_partially_delivered
+
+        except Exception as e:
+            logger.error(f"Error calculating partial delivery for order {order.id}: {e}")
+            return False
+
     def track_field_modification(self, record, field_name, new_value, modified_by):
         """Track a field modification in the database"""
         try:
@@ -799,9 +842,42 @@ def register_editing_routes(app):
             raw_data['orderMetadata'] = order_metadata
             order.raw_data = json.dumps(raw_data)
 
+            # Update OrderLineItem database records to match the transaction data
+            for item in line_items:
+                item_id = str(item.get('id', ''))
+                if item_id in transaction_updates:
+                    # Find the corresponding OrderLineItem record
+                    line_item = OrderLineItem.query.filter_by(
+                        order_id=order_id,
+                        sku_id=item.get('skuId', item.get('id', ''))
+                    ).first()
+
+                    if line_item:
+                        update_data = transaction_updates[item_id]
+                        transaction_status = item.get('transactionStatus', {})
+
+                        # Update transacted quantity in database
+                        if 'transacted_quantity' in update_data:
+                            line_item.transacted_quantity = update_data['transacted_quantity']
+                            logger.info(f"Updated OrderLineItem {line_item.id} transacted_quantity to {update_data['transacted_quantity']}")
+
+                        # Update quantity if changed
+                        if 'ordered_quantity' in update_data:
+                            line_item.quantity = update_data['ordered_quantity']
+                            logger.info(f"Updated OrderLineItem {line_item.id} quantity to {update_data['ordered_quantity']}")
+
             # Mark the order as modified and track the fields
             editing_service = EditingService()
             editing_service.track_field_modification(order, 'transaction_details', f"Updated {updated_items} transactions", modified_by)
+
+            # Recalculate partial delivery status based on local transaction data
+            original_partial_status = order.partially_delivered
+            calculated_partial_status = editing_service.calculate_partial_delivery(order)
+            order.partially_delivered = calculated_partial_status
+
+            if original_partial_status != calculated_partial_status:
+                editing_service.track_field_modification(order, 'partially_delivered', calculated_partial_status, modified_by)
+                logger.info(f"Order {order_id} partially_delivered status changed from {original_partial_status} to {calculated_partial_status}")
 
             # Save changes
             db.session.commit()
