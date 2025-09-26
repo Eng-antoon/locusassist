@@ -12,6 +12,12 @@ def run_migration():
     try:
         # Get the database path
         db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'locusassist.db')
+        print(f"Using database path: {db_path}")
+
+        # Check if database file exists
+        if not os.path.exists(db_path):
+            print(f"❌ Database file not found at: {db_path}")
+            return False
 
         # Connect to database
         conn = sqlite3.connect(db_path)

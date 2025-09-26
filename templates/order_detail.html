@@ -569,10 +569,10 @@
                                 </div>
                                 <div class="info-item mb-2 editable-field" data-field="vehicle_id">
                                     <label>Vehicle ID:</label>
-                                    <span class="display-value">{{ order.vehicle_id or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.vehicle_id or tour.vehicleId or 'N/A' }}</span>
                                     <input type="text" class="form-control edit-input d-none"
-                                           value="{{ order.vehicle_id or '' }}"
-                                           data-original="{{ order.vehicle_id or '' }}">
+                                           value="{{ order.vehicle_id or tour.vehicleId or '' }}"
+                                           data-original="{{ order.vehicle_id or tour.vehicleId or '' }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
@@ -1563,7 +1563,19 @@ function saveOrderChanges() {
 
             // Handle status change notifications
             if (changes.order_status === 'CANCELLED') {
-                showOrderAlert('info', 'Order marked as cancelled. You can now add cancellation reason and images.');
+                showOrderAlert('info', 'Order marked as cancelled. You can now add cancellation reason.');
+                // Automatically enable edit mode again if status was changed to CANCELLED
+                // This allows user to immediately set the cancellation reason
+                setTimeout(() => {
+                    if (!isEditingOrder) {
+                        toggleOrderEdit();
+                        // Focus on cancellation reason field
+                        const cancellationInput = document.querySelector('[data-field="cancellation_reason"] .edit-input');
+                        if (cancellationInput) {
+                            cancellationInput.focus();
+                        }
+                    }
+                }, 1000);
             } else if (data.updated_fields && data.updated_fields.includes('cancellation_reason')) {
                 // Check if cancellation reason was cleared due to status change
                 const cancellationField = document.querySelector('[data-field="cancellation_reason"]');

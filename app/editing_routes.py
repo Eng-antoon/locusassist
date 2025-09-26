@@ -83,7 +83,17 @@ class EditingService:
 
             # Propagate changes to all orders in this tour if requested
             propagated_orders = 0
-            if propagate_to_orders and updated_fields:
+            if propagate_to_orders:
+                # Always propagate tour data to orders to ensure consistency
+                # Include all core tour fields that should be synced, not just updated ones
+                core_tour_fields = ['rider_name', 'rider_id', 'rider_phone', 'vehicle_registration',
+                                   'vehicle_id', 'tour_name', 'tour_number', 'tour_status', 'cancellation_reason']
+
+                # Combine updated fields with all core fields for comprehensive update
+                fields_to_propagate = list(set(updated_fields + core_tour_fields))
+                logger.info(f"Propagating fields: {fields_to_propagate}")
+
+            if propagate_to_orders and fields_to_propagate:
                 # Find orders linked to this tour using multiple approaches
                 orders = []
 
@@ -143,7 +153,7 @@ class EditingService:
 
                 for order in orders:
                     order_updated = False
-                    for field_name in updated_fields:
+                    for field_name in fields_to_propagate:
                         # Map tour fields to order fields
                         order_field_map = {
                             'rider_name': 'rider_name',
@@ -162,8 +172,9 @@ class EditingService:
                             tour_new_value = getattr(tour, field_name)
                             old_order_value = getattr(order, order_field_map[field_name])
 
-                            # Always overwrite with tour data (no fallback protection)
-                            if old_order_value != tour_new_value:
+                            # ALWAYS override order data with tour data - no fallback protection
+                            # Force update even if values are the same to ensure consistency
+                            if True:  # Always update to override any old/stale data
                                 # Special handling for tour status changes - also handle order cancellation reason
                                 if field_name == 'tour_status':
                                     # If tour status changed from CANCELLED to non-CANCELLED, clear order cancellation reason too
@@ -177,7 +188,7 @@ class EditingService:
                                 # Track the field modification
                                 self.track_field_modification(order, order_field_map[field_name], tour_new_value, f"Tour Update: {modified_by}")
                                 order_updated = True
-                                logger.info(f"Propagated {field_name} to order {order.id}: '{old_order_value}' → '{tour_new_value}'")
+                                logger.info(f"FORCED propagation of {field_name} to order {order.id}: '{old_order_value}' → '{tour_new_value}'")
 
                     if order_updated:
                         propagated_orders += 1
