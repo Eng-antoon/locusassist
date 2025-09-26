@@ -797,13 +797,13 @@
                                         <td><code>{{ item.id }}</code></td>
                                         <td class="editable-cell" data-field="ordered_quantity">
                                             <span class="display-value">{{ item.transactionStatus.orderedQuantity }}</span>
-                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.transactionStatus.orderedQuantity }}">
+                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.transactionStatus.orderedQuantity }}" data-original="{{ item.transactionStatus.orderedQuantity }}">
                                         </td>
                                         <td class="editable-cell" data-field="transacted_quantity">
                                             <span class="display-value">
                                                 <span class="badge bg-primary">{{ item.transactionStatus.transactedQuantity }}</span>
                                             </span>
-                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.transactionStatus.transactedQuantity }}">
+                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.transactionStatus.transactedQuantity }}" data-original="{{ item.transactionStatus.transactedQuantity }}">
                                         </td>
                                         <td class="editable-cell" data-field="transacted_weight">
                                             <span class="display-value">
@@ -814,11 +814,11 @@
                                                 {% endif %}
                                             </span>
                                             <input type="number" step="0.01" class="form-control form-control-sm edit-input d-none"
-                                                   value="{{ item.transactionStatus.transactedWeight.value if item.transactionStatus.transactedWeight else '' }}">
+                                                   value="{{ item.transactionStatus.transactedWeight.value if item.transactionStatus.transactedWeight else '' }}" data-original="{{ item.transactionStatus.transactedWeight.value if item.transactionStatus.transactedWeight else '' }}">
                                         </td>
                                         <td class="editable-cell" data-field="transaction_status">
                                             <span class="display-value"><span class="badge bg-success">{{ item.transactionStatus.status }}</span></span>
-                                            <select class="form-control form-control-sm edit-input d-none">
+                                            <select class="form-control form-control-sm edit-input d-none" data-original="{{ item.transactionStatus.status }}">
                                                 <option value="DELIVERED" {{ 'selected' if item.transactionStatus.status == 'DELIVERED' else '' }}>DELIVERED</option>
                                                 <option value="PARTIALLY_DELIVERED" {{ 'selected' if item.transactionStatus.status == 'PARTIALLY_DELIVERED' else '' }}>PARTIALLY_DELIVERED</option>
                                                 <option value="NOT_DELIVERED" {{ 'selected' if item.transactionStatus.status == 'NOT_DELIVERED' else '' }}>NOT_DELIVERED</option>

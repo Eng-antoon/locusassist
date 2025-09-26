@@ -831,6 +831,26 @@ def register_routes(app, config):
                     order_detail_data['tags'] = json.loads(db_order.tags)
                 if db_order.custom_fields:
                     order_detail_data['custom_fields'] = json.loads(db_order.custom_fields)
+
+                # Use updated line items and transactions from database if available
+                if db_order.raw_data:
+                    raw_data = json.loads(db_order.raw_data)
+                    db_line_items = raw_data.get('orderMetadata', {}).get('lineItems', [])
+                    if db_line_items:
+                        order_detail_data['lineItems'] = db_line_items
+                        logger.info(f"Using {len(db_line_items)} line items from database for order {order_id}")
+
+                        # Also update orderMetadata to ensure consistency
+                        if 'orderMetadata' not in order_detail_data:
+                            order_detail_data['orderMetadata'] = {}
+                        order_detail_data['orderMetadata']['lineItems'] = db_line_items
+
+                    # Also use updated transaction data if available
+                    db_transactions = raw_data.get('orderMetadata', {}).get('transactions', [])
+                    if db_transactions:
+                        order_detail_data['orderMetadata']['transactions'] = db_transactions
+                        logger.info(f"Using {len(db_transactions)} transactions from database for order {order_id}")
+
             except json.JSONDecodeError:
                 pass  # Keep original if parsing fails
 
