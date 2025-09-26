@@ -777,7 +777,8 @@ def register_editing_routes(app):
             order.raw_data = json.dumps(raw_data)
 
             # Mark the order as modified and track the fields
-            self.track_field_modification(order, 'transaction_details', f"Updated {results['updated']} transactions", modified_by)
+            editing_service = EditingService()
+            editing_service.track_field_modification(order, 'transaction_details', f"Updated {updated_items} transactions", modified_by)
 
             # Save changes
             db.session.commit()
