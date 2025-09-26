@@ -1513,10 +1513,16 @@ def register_routes(app, config):
         from datetime import datetime, timedelta
         from models import Tour
 
-        # Get the most recent tour date as default, or yesterday if no tours
+        # Get the date parameter - could be orders date or tour date
         selected_date = request.args.get('date')
 
-        if not selected_date:
+        if selected_date:
+            # If date is provided, assume it's an orders date and convert to tour date
+            # (tours are created 1 day before orders)
+            orders_date = datetime.strptime(selected_date, "%Y-%m-%d")
+            tour_date = orders_date - timedelta(days=1)
+            selected_date = tour_date.strftime("%Y-%m-%d")
+        else:
             # Find the most recent tour date
             latest_tour = Tour.query.order_by(Tour.tour_date.desc()).first()
             if latest_tour and latest_tour.tour_date:
@@ -1556,9 +1562,22 @@ def register_routes(app, config):
     def api_tours():
         """API endpoint to get tours with filtering and pagination"""
         from app.tours import tour_service
+        from datetime import datetime, timedelta
 
         # Get query parameters
         date = request.args.get('date')
+
+        # Convert orders date to tour date if provided
+        # Tours are created 1 day before the orders they contain
+        if date:
+            try:
+                orders_date = datetime.strptime(date, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                date = tour_date.strftime("%Y-%m-%d")
+            except ValueError:
+                # If date format is invalid, keep original
+                pass
+
         page = int(request.args.get('page', 1))
         per_page = min(int(request.args.get('per_page', 50)), 100)  # Max 100
         search = request.args.get('search', '').strip()
@@ -1581,8 +1600,21 @@ def register_routes(app, config):
     def api_tours_summary():
         """API endpoint to get tour summary statistics"""
         from app.tours import tour_service
+        from datetime import datetime, timedelta
 
         date = request.args.get('date')
+
+        # Convert orders date to tour date if provided
+        # Tours are created 1 day before the orders they contain
+        if date:
+            try:
+                orders_date = datetime.strptime(date, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                date = tour_date.strftime("%Y-%m-%d")
+            except ValueError:
+                # If date format is invalid, keep original
+                pass
+
         result = tour_service.get_tour_summary_stats(date=date)
 
         return jsonify(result)

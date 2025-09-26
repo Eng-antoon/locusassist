@@ -1215,7 +1215,18 @@ class EnhancedFilters {
                 timestamp: new Date().getTime()
             };
             localStorage.setItem('locusAssistFilterState', JSON.stringify(state));
+
+            // Also save the current selected date for tours page to use
+            const dateFrom = document.getElementById('filter-date-from')?.value;
+            const dateTo = document.getElementById('filter-date-to')?.value;
+            const selectedDate = document.getElementById('filter-date')?.value;
+
+            // Determine what date to save for tours (prioritize single date over range)
+            let dateForTours = selectedDate || dateFrom || new Date().toISOString().split('T')[0];
+            localStorage.setItem('selectedDate', dateForTours);
+
             console.log('State saved to localStorage:', state);
+            console.log('Selected date saved for tours:', dateForTours);
         } catch (error) {
             console.error('Error saving state to localStorage:', error);
         }

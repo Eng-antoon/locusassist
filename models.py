@@ -282,7 +282,11 @@ class Tour(db.Model):
     # Statistics
     total_orders = db.Column(db.Integer, default=0)
     completed_orders = db.Column(db.Integer, default=0)
+    cancelled_orders = db.Column(db.Integer, default=0)
     pending_orders = db.Column(db.Integer, default=0)
+
+    # Tour status (WAITING, ONGOING, CANCELLED, COMPLETED)
+    tour_status = db.Column(db.String(20), default='WAITING')
 
     # Location summary
     delivery_cities = db.Column(db.Text)  # JSON array of cities
@@ -309,7 +313,9 @@ class Tour(db.Model):
             'tour_end_time': self.tour_end_time.isoformat() if self.tour_end_time else None,
             'total_orders': self.total_orders,
             'completed_orders': self.completed_orders,
+            'cancelled_orders': self.cancelled_orders,
             'pending_orders': self.pending_orders,
+            'tour_status': self.tour_status,
             'delivery_cities': json.loads(self.delivery_cities) if self.delivery_cities else [],
             'delivery_areas': json.loads(self.delivery_areas) if self.delivery_areas else [],
             'created_at': self.created_at.isoformat() if self.created_at else None,

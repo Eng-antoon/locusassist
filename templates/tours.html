@@ -62,18 +62,24 @@
             <!-- Filters Content -->
             <div id="filters-content" style="display: none;" class="filters-body">
                 <div class="row g-4">
-                    <!-- Date and Search Filters -->
+                    <!-- Search and Info -->
                     <div class="col-lg-6">
                         <div class="filter-section">
                             <h6 class="filter-section-title">
-                                <i class="fas fa-calendar-alt me-2"></i>Date & Search
+                                <i class="fas fa-search me-2"></i>Search & Info
                             </h6>
 
-                            <!-- Date -->
+                            <!-- Date Display (Read-only) -->
                             <div class="mb-3">
-                                <label class="form-label">Date</label>
-                                <input type="date" class="form-control" id="filter-date" name="date"
-                                       value="{{ selected_date }}">
+                                <label class="form-label">Date (from Orders Page)</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="display-date" readonly
+                                           value="{{ selected_date }}" style="background-color: #f8f9fa;">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-lock text-muted" title="Date follows Orders page selection"></i>
+                                    </span>
+                                </div>
+                                <small class="text-muted">Date automatically follows your Orders page selection</small>
                             </div>
 
                             <!-- Search -->
@@ -126,10 +132,6 @@
                         <button class="btn btn-outline-secondary" id="clear-filters-btn">
                             <i class="fas fa-times me-1"></i>
                             Clear All
-                        </button>
-                        <button class="btn btn-outline-info" id="load-today-btn">
-                            <i class="fas fa-calendar-day me-1"></i>
-                            Today's Tours
                         </button>
                     </div>
 
@@ -187,22 +189,136 @@
 // Tours dashboard state
 let currentPage = 1;
 let currentFilters = {
-    date: '{{ selected_date }}',
+    date: '{{ selected_date }}', // Initialize with server date, will be updated
     search: '',
     sort_by: 'tour_number',
     sort_order: 'asc',
     per_page: 50
 };
 
+// Function to get the current date from the orders page (localStorage or default)
+function getOrdersPageDate() {
+    // Try to get the date from localStorage (set by orders page)
+    const ordersDate = localStorage.getItem('selectedDate');
+    if (ordersDate && ordersDate !== 'null' && ordersDate !== '') {
+        console.log('Using date from orders page localStorage:', ordersDate);
+        return ordersDate;
+    }
+
+    // Fallback to server-provided date
+    const serverDate = '{{ selected_date }}';
+    console.log('Using server-provided date:', serverDate);
+    return serverDate;
+}
+
 // Initialize tours dashboard
 document.addEventListener('DOMContentLoaded', function() {
+    // Set the proper date first
+    currentFilters.date = getOrdersPageDate();
+    console.log('Initialized with date:', currentFilters.date);
+
     initializeFiltersPanel();
-    loadTours();
-    loadTourSummary();
+
+    // Update the displayed date from orders page
+    updateDisplayedDate();
+
+    // Automatically refresh tour data when page loads to ensure it's up to date
+    console.log('Auto-refreshing tour data on page load...');
+    autoRefreshTourData();
 
     // Update last updated time
     updateLastUpdatedTime();
+
+    // Listen for storage events to update when orders page changes date
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'selectedDate' && e.newValue !== e.oldValue) {
+            console.log('Date changed in orders page from', e.oldValue, 'to', e.newValue);
+            currentFilters.date = e.newValue;
+            updateDisplayedDate();
+            // Auto-refresh data when date changes
+            autoRefreshTourData();
+        }
+    });
+
+    // Listen for page visibility changes to refresh when user returns to tab
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log('Tab became visible, auto-refreshing tour data...');
+            autoRefreshTourData();
+        }
+    });
 });
+
+// Auto-refresh tour data silently on page load
+async function autoRefreshTourData() {
+    try {
+        console.log('Auto-refreshing tour data...');
+
+        // Show subtle refresh indicator
+        showAutoRefreshStatus('Updating tours...');
+
+        const params = new URLSearchParams();
+        if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+
+        const response = await fetch(`/api/tours/refresh?${params}`, {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log(`Auto-refresh completed: ${result.message} - Processed: ${result.processed_orders} orders, Updated: ${result.updated_tours} tours`);
+
+            // Load the updated data
+            await loadTours();
+            await loadTourSummary();
+            updateLastUpdatedTime();
+
+            // Show success briefly
+            showAutoRefreshStatus(`Updated: ${result.processed_orders} orders, ${result.updated_tours} tours`, 'success');
+            setTimeout(() => hideAutoRefreshStatus(), 2000);
+        } else {
+            console.error('Auto-refresh failed:', result.message);
+            // Fallback: just load existing data
+            await loadTours();
+            await loadTourSummary();
+            showAutoRefreshStatus('Refresh failed, showing cached data', 'error');
+            setTimeout(() => hideAutoRefreshStatus(), 3000);
+        }
+    } catch (error) {
+        console.error('Error during auto-refresh:', error);
+        // Fallback: just load existing data
+        await loadTours();
+        await loadTourSummary();
+        showAutoRefreshStatus('Update error, showing cached data', 'error');
+        setTimeout(() => hideAutoRefreshStatus(), 3000);
+    }
+}
+
+// Show auto-refresh status indicator
+function showAutoRefreshStatus(message, type = 'info') {
+    const lastUpdatedElement = document.getElementById('last-updated');
+    if (lastUpdatedElement) {
+        const originalClass = lastUpdatedElement.className;
+        lastUpdatedElement.textContent = message;
+
+        // Apply styling based on type
+        if (type === 'success') {
+            lastUpdatedElement.style.color = '#28a745';
+        } else if (type === 'error') {
+            lastUpdatedElement.style.color = '#dc3545';
+        } else {
+            lastUpdatedElement.style.color = '#007bff';
+        }
+    }
+}
+
+// Hide auto-refresh status indicator
+function hideAutoRefreshStatus() {
+    updateLastUpdatedTime();
+}
 
 function initializeFiltersPanel() {
     // Toggle filters panel
@@ -231,7 +347,6 @@ function initializeFiltersPanel() {
     // Filter form handlers
     document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
     document.getElementById('clear-filters-btn').addEventListener('click', clearFilters);
-    document.getElementById('load-today-btn').addEventListener('click', loadTodaysTours);
     document.getElementById('refresh-tour-data-btn').addEventListener('click', refreshTourData);
 
     // Per page change handler
@@ -242,9 +357,16 @@ function initializeFiltersPanel() {
     });
 }
 
+function updateDisplayedDate() {
+    // Update the displayed date field
+    const displayDateField = document.getElementById('display-date');
+    if (displayDateField) {
+        displayDateField.value = currentFilters.date;
+    }
+}
+
 function applyFilters() {
-    // Get filter values
-    currentFilters.date = document.getElementById('filter-date').value;
+    // Get filter values (date comes from orders page, so don't read it from form)
     currentFilters.search = document.getElementById('filter-search').value.trim();
     currentFilters.sort_by = document.getElementById('filter-sort-by').value;
     currentFilters.sort_order = document.getElementById('filter-sort-order').value;
@@ -258,8 +380,7 @@ function applyFilters() {
 }
 
 function clearFilters() {
-    // Reset filter form
-    document.getElementById('filter-date').value = new Date().toISOString().split('T')[0];
+    // Reset filter form (only search and sorting, date comes from orders page)
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-sort-by').value = 'tour_number';
     document.getElementById('filter-sort-order').value = 'asc';
@@ -268,13 +389,9 @@ function clearFilters() {
     applyFilters();
 }
 
-function loadTodaysTours() {
-    document.getElementById('filter-date').value = new Date().toISOString().split('T')[0];
-    applyFilters();
-}
-
 async function loadTours() {
     try {
+        console.log('Loading tours with filters:', currentFilters);
         showLoading();
 
         // Build query parameters
@@ -292,14 +409,21 @@ async function loadTours() {
             params.append('search', currentFilters.search);
         }
 
-        const response = await fetch(`/api/tours?${params}`);
+        const apiUrl = `/api/tours?${params}`;
+        console.log('Fetching tours from:', apiUrl);
+
+        const response = await fetch(apiUrl);
         const result = await response.json();
 
+        console.log('Tours API response:', result);
+
         if (result.success) {
+            console.log('Displaying', result.tours.length, 'tours');
             displayTours(result.tours);
             displayPagination(result);
             displayResultsSummary(result);
         } else {
+            console.error('API error:', result.error);
             showError('Failed to load tours: ' + (result.error || 'Unknown error'));
             displayTours([]);
         }
@@ -368,6 +492,14 @@ function displayTourStats(stats) {
         </div>
 
         <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(220, 53, 69, 0.1); color: var(--danger-color);">
+                <i class="fas fa-times-circle"></i>
+            </div>
+            <div class="stat-value">${stats.cancelled_orders || 0}</div>
+            <div class="stat-label">Cancelled Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
             <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--primary-color);">
                 <i class="fas fa-users"></i>
             </div>
@@ -386,9 +518,16 @@ function displayTourStats(stats) {
 }
 
 function displayTours(tours) {
+    console.log('displayTours called with:', tours);
     const container = document.getElementById('tours-container');
 
+    if (!container) {
+        console.error('tours-container element not found!');
+        return;
+    }
+
     if (!tours || tours.length === 0) {
+        console.log('No tours to display, showing empty state');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">
@@ -407,21 +546,33 @@ function displayTours(tours) {
         return;
     }
 
+    console.log(`Rendering ${tours.length} tours`);
     container.innerHTML = `
         <div class="orders-grid">
             ${tours.map((tour, index) => createTourCard(tour, index)).join('')}
         </div>
     `;
+    console.log('Tours rendered successfully');
 }
 
 function createTourCard(tour, index) {
+    // Calculate completion rate including cancelled orders (cancelled = completed for tour status)
     const completionRate = tour.total_orders > 0
-        ? Math.round((tour.completed_orders / tour.total_orders) * 100)
+        ? Math.round(((tour.completed_orders + tour.cancelled_orders) / tour.total_orders) * 100)
         : 0;
 
     const deliveryCities = tour.delivery_cities && tour.delivery_cities.length > 0
         ? tour.delivery_cities.slice(0, 3).join(', ') + (tour.delivery_cities.length > 3 ? '...' : '')
         : 'N/A';
+
+    // Determine tour status color and icon
+    const statusConfig = {
+        'WAITING': { color: 'warning', icon: 'clock', label: 'Waiting' },
+        'ONGOING': { color: 'info', icon: 'truck', label: 'Ongoing' },
+        'CANCELLED': { color: 'danger', icon: 'times-circle', label: 'Cancelled' },
+        'COMPLETED': { color: 'success', icon: 'check-circle', label: 'Completed' }
+    };
+    const status = statusConfig[tour.tour_status] || statusConfig['WAITING'];
 
     return `
         <div class="order-card clickable-card hover-glow slide-in-left"
@@ -447,6 +598,9 @@ function createTourCard(tour, index) {
                 <div class="d-flex flex-wrap gap-2 mb-3">
                     <span class="status-indicator info">
                         ${tour.total_orders} Orders
+                    </span>
+                    <span class="status-indicator ${status.color}">
+                        <i class="fas fa-${status.icon}"></i> ${status.label}
                     </span>
                     <span class="status-indicator ${completionRate === 100 ? 'success' : 'warning'}">
                         ${completionRate}% Complete
@@ -509,6 +663,10 @@ function createTourCard(tour, index) {
                         <div class="validation-metric">
                             <div class="validation-metric-value">${tour.completed_orders}</div>
                             <div class="validation-metric-label">Completed</div>
+                        </div>
+                        <div class="validation-metric">
+                            <div class="validation-metric-value">${tour.cancelled_orders || 0}</div>
+                            <div class="validation-metric-label">Cancelled</div>
                         </div>
                         <div class="validation-metric">
                             <div class="validation-metric-value">${tour.pending_orders}</div>

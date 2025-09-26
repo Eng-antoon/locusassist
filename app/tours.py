@@ -134,8 +134,29 @@ class TourService:
 
             # Calculate statistics
             tour.total_orders = len(orders)
-            tour.completed_orders = len([o for o in orders if o.order_status == 'COMPLETED'])
-            tour.pending_orders = tour.total_orders - tour.completed_orders
+            completed_orders = [o for o in orders if o.order_status == 'COMPLETED']
+            cancelled_orders = [o for o in orders if o.order_status == 'CANCELLED']
+            waiting_orders = [o for o in orders if o.order_status == 'WAITING']
+
+            tour.completed_orders = len(completed_orders)
+            tour.cancelled_orders = len(cancelled_orders)
+            tour.pending_orders = tour.total_orders - tour.completed_orders - tour.cancelled_orders
+
+            # Calculate tour status based on order statuses
+            if tour.total_orders == 0:
+                tour.tour_status = 'WAITING'
+            elif len(cancelled_orders) == tour.total_orders:
+                # All orders are cancelled
+                tour.tour_status = 'CANCELLED'
+            elif len(completed_orders) + len(cancelled_orders) == tour.total_orders:
+                # All orders are either completed or cancelled (consider cancelled as completed for tour)
+                tour.tour_status = 'COMPLETED'
+            elif len(waiting_orders) == tour.total_orders:
+                # All orders are waiting
+                tour.tour_status = 'WAITING'
+            else:
+                # Mixed statuses - some completed/ongoing/cancelled
+                tour.tour_status = 'ONGOING'
 
             # Collect location data
             cities = set()
@@ -299,6 +320,7 @@ class TourService:
             total_tours = len(tours)
             total_orders = sum(tour.total_orders for tour in tours)
             completed_orders = sum(tour.completed_orders for tour in tours)
+            cancelled_orders = sum(tour.cancelled_orders for tour in tours)
             pending_orders = sum(tour.pending_orders for tour in tours)
 
             # Count unique riders and cities
@@ -321,10 +343,11 @@ class TourService:
                 'total_tours': total_tours,
                 'total_orders': total_orders,
                 'completed_orders': completed_orders,
+                'cancelled_orders': cancelled_orders,
                 'pending_orders': pending_orders,
                 'unique_riders': len(unique_riders),
                 'unique_cities': len(all_cities),
-                'completion_rate': round((completed_orders / total_orders * 100) if total_orders > 0 else 0, 1)
+                'completion_rate': round(((completed_orders + cancelled_orders) / total_orders * 100) if total_orders > 0 else 0, 1)
             }
 
         except Exception as e:
