@@ -733,6 +733,7 @@ class LocusAuth:
                     if existing_order.raw_data != new_raw_data:
                         existing_order.raw_data = new_raw_data
                         existing_order.order_status = order_data.get('orderStatus', '')
+                        logger.info(f"Existing order status: {existing_order.order_status}, New order status: {order_data.get('orderStatus', '')}")
                         # Update other fields as needed
                         location = order_data.get('location', {})
                         if location and isinstance(location, dict):
@@ -742,6 +743,27 @@ class LocusAuth:
                                 existing_order.location_address = address.get('formattedAddress')
                                 existing_order.location_city = address.get('city')
                                 existing_order.location_country_code = address.get('countryCode')
+
+                            # Extract coordinates from location.latLng
+                            latLng = location.get('latLng', {})
+                            if latLng and isinstance(latLng, dict):
+                                lat = latLng.get('lat')
+                                lng = latLng.get('lng')
+                                logger.info(f"[COORDINATES] Extracting coordinates for order {order_id}: lat={lat}, lng={lng}")
+                                if lat is not None:
+                                    try:
+                                        existing_order.location_latitude = float(lat)
+                                        logger.info(f"[COORDINATES] Successfully saved latitude {lat} for order {order_id}")
+                                    except (ValueError, TypeError):
+                                        logger.warning(f"[COORDINATES] Invalid latitude value for order {order_id}: {lat}")
+                                if lng is not None:
+                                    try:
+                                        existing_order.location_longitude = float(lng)
+                                        logger.info(f"[COORDINATES] Successfully saved longitude {lng} for order {order_id}")
+                                    except (ValueError, TypeError):
+                                        logger.warning(f"[COORDINATES] Invalid longitude value for order {order_id}: {lng}")
+                            else:
+                                logger.warning(f"[COORDINATES] No latLng data found for order {order_id}")
 
                         # Extract tour/delivery data (defensive programming)
                         order_metadata = order_data.get('orderMetadata')
@@ -823,16 +845,21 @@ class LocusAuth:
             if latLng and isinstance(latLng, dict):
                 lat = latLng.get('lat') or latLng.get('latitude')
                 lng = latLng.get('lng') or latLng.get('longitude')
+                logger.info(f"[COORDINATES] Creating new order {order_id}: lat={lat}, lng={lng}")
                 if lat is not None:
                     try:
                         order.location_latitude = float(lat)
+                        logger.info(f"[COORDINATES] Successfully set latitude {lat} for new order {order_id}")
                     except (ValueError, TypeError):
-                        pass
+                        logger.warning(f"[COORDINATES] Invalid latitude value for new order {order_id}: {lat}")
                 if lng is not None:
                     try:
                         order.location_longitude = float(lng)
+                        logger.info(f"[COORDINATES] Successfully set longitude {lng} for new order {order_id}")
                     except (ValueError, TypeError):
-                        pass
+                        logger.warning(f"[COORDINATES] Invalid longitude value for new order {order_id}: {lng}")
+            else:
+                logger.warning(f"[COORDINATES] No latLng data found for new order {order_id}")
 
         # Extract tour/delivery data (defensive programming)
         order_metadata = order_data.get('orderMetadata')
@@ -978,16 +1005,21 @@ class LocusAuth:
             if latLng and isinstance(latLng, dict):
                 lat = latLng.get('lat') or latLng.get('latitude')
                 lng = latLng.get('lng') or latLng.get('longitude')
+                logger.info(f"[COORDINATES] Updating existing order {existing_order.id}: lat={lat}, lng={lng}")
                 if lat is not None:
                     try:
                         existing_order.location_latitude = float(lat)
+                        logger.info(f"[COORDINATES] Successfully updated latitude {lat} for existing order {existing_order.id}")
                     except (ValueError, TypeError):
-                        pass
+                        logger.warning(f"[COORDINATES] Invalid latitude value for existing order {existing_order.id}: {lat}")
                 if lng is not None:
                     try:
                         existing_order.location_longitude = float(lng)
+                        logger.info(f"[COORDINATES] Successfully updated longitude {lng} for existing order {existing_order.id}")
                     except (ValueError, TypeError):
-                        pass
+                        logger.warning(f"[COORDINATES] Invalid longitude value for existing order {existing_order.id}: {lng}")
+            else:
+                logger.warning(f"[COORDINATES] No latLng data found for existing order {existing_order.id}")
 
         # Update enhanced fields from order_data
         field_mappings = {
@@ -1079,6 +1111,19 @@ class LocusAuth:
                 location_address = address.get('formattedAddress', '')
                 location_city = address.get('city', '')
                 location_country_code = address.get('countryCode', '')
+
+            # Extract coordinates from location.latLng for the order structure
+            location_lat_lng = {}
+            latLng = location.get('latLng', {})
+            if latLng and isinstance(latLng, dict):
+                lat = latLng.get('lat')
+                lng = latLng.get('lng')
+                if lat is not None and lng is not None:
+                    location_lat_lng = {
+                        'lat': lat,
+                        'lng': lng,
+                        'accuracy': latLng.get('accuracy', 0)
+                    }
 
             # Get tour information from task
             tour_id = ''
@@ -1210,7 +1255,8 @@ class LocusAuth:
                         'formattedAddress': location_address,
                         'city': location_city,
                         'countryCode': location_country_code
-                    }
+                    },
+                    'latLng': location_lat_lng
                 },
                 'lineItems': processed_line_items,
                 'orderMetadata': {

@@ -51,6 +51,9 @@
 - **Enhanced Data Storage**: 100% population of enhanced fields (rider details, vehicle info, **GPS coordinates**, cancellation reasons, logistics data)
 - **PostgreSQL Database**: Production-grade database with proper foreign key relationships, data integrity, and **GPS coordinate storage**
 - **Smart Refresh with UPSERT**: Seamlessly updates existing data without duplicate key violations
+- **Enhanced Coordinate Extraction**: Advanced GPS coordinate extraction from `tasks[0-49].customerVisit.location.latLng` during smart merge operations
+- **Comprehensive Coordinate Logging**: Detailed `[COORDINATES]` tagged logging for coordinate extraction tracking and debugging
+- **Multi-Function Coordinate Support**: GPS coordinates extracted in all order processing functions (`smart_merge_orders_to_database`, `_create_new_order_record`, `_update_existing_order_record`)
 - **Status-Aware Caching**: Intelligent caching system with status-specific cache keys for optimal performance
 - **Defensive Data Processing**: Robust handling of incomplete or malformed order data with NoneType error prevention
 - **Data Source Transparency**: Clear visual indicators showing whether data comes from database, API, or combined sources
@@ -165,6 +168,12 @@ Enhanced the refresh button functionality to properly extract and store delivery
    - Implemented comprehensive logging for coordinate tracking
    - Updated `store_order_from_api_data()` with enhanced coordinate storage
 
+2. **`app/auth.py`** - Smart Merge Coordinate Extraction Enhancement:
+   - **`smart_merge_orders_to_database()`** (Lines 747-766): Enhanced existing order updates with coordinate extraction from `location.latLng`
+   - **`_create_new_order_record()`** (Lines 843-862): Added comprehensive coordinate logging for new order creation
+   - **`_update_existing_order_record()`** (Lines 1003-1022): Enhanced existing order updates with detailed coordinate logging
+   - **`_extract_order_from_task()`** (Lines 1102-1113, 1246): Updated task-to-order conversion to include `latLng` in location structure
+
 #### **Technical Changes:**
 ```python
 # Priority 1: Check customerVisit.location.latLng (from task-search API)
@@ -173,6 +182,25 @@ visit_lat_lng = visit_location.get('latLng', {})
 
 # Priority 2: Check chosenLocation.geometry.latLng (fallback path)
 geometry_lat_lng = chosen_location.get('geometry', {}).get('latLng', {})
+```
+
+#### **Smart Merge Coordinate Extraction (New Enhancement):**
+```python
+# Enhanced coordinate extraction in smart_merge_orders_to_database()
+latLng = location.get('latLng', {})
+if latLng and isinstance(latLng, dict):
+    lat = latLng.get('lat')
+    lng = latLng.get('lng')
+    logger.info(f"[COORDINATES] Extracting coordinates for order {order_id}: lat={lat}, lng={lng}")
+    if lat is not None:
+        try:
+            existing_order.location_latitude = float(lat)
+            logger.info(f"[COORDINATES] Successfully saved latitude {lat} for order {order_id}")
+        except (ValueError, TypeError):
+            logger.warning(f"[COORDINATES] Invalid latitude value for order {order_id}: {lat}")
+    # Similar handling for longitude...
+else:
+    logger.warning(f"[COORDINATES] No latLng data found for order {order_id}")
 ```
 
 #### **API Response Structure Handled:**
@@ -194,9 +222,12 @@ geometry_lat_lng = chosen_location.get('geometry', {}).get('latLng', {})
 ### 🎯 **Impact**
 - **Refresh button now extracts coordinates** directly from task-search API
 - **Zero additional API calls** needed for heatmap functionality
-- **Enhanced logging** for coordinate extraction debugging
+- **Enhanced logging** for coordinate extraction debugging with `[COORDINATES]` tags
 - **Robust fallback system** ensures maximum coordinate capture rate
-- **Production ready** with comprehensive error handling
+- **Smart merge functionality** now handles coordinate extraction for all order processing scenarios
+- **Comprehensive function coverage**: Coordinates extracted in create, update, and merge operations
+- **Production ready** with comprehensive error handling and detailed logging
+- **Task data structure support**: Properly handles coordinates from `tasks[0-49].customerVisit.location.latLng` format
 
 ---
 
