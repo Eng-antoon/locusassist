@@ -773,11 +773,46 @@ def register_routes(app, config):
 
         # Merge database fields into the API response if we have a database record
         if db_order:
-            # ALWAYS prefer task API data for status if available (most accurate)
-            if order_detail_data.get('_is_task_format'):
-                # We have task data - keep the task status and use database for enhanced fields only
+            # Check if order has been manually modified - if so, prefer database data
+            if db_order.is_modified:
+                logger.info(f"Order {order_id} has been manually modified - using database data over API data")
+
+                # Use database data for ALL manually modified fields
+                from app.data_protection import data_protection_service
+                protected_fields = data_protection_service.get_protected_fields(db_order)
+
+                if 'order_status' in protected_fields:
+                    order_detail_data['order_status'] = db_order.order_status
+                    order_detail_data['orderStatus'] = db_order.order_status
+                    order_detail_data['effective_status'] = db_order.order_status
+                    logger.info(f"Using manually edited status '{db_order.order_status}' over API status")
+
+                if 'cancellation_reason' in protected_fields:
+                    order_detail_data['cancellation_reason'] = db_order.cancellation_reason
+                    logger.info(f"Using manually edited cancellation reason over API data")
+
+                # Preserve other manually edited fields
+                if 'rider_name' in protected_fields:
+                    order_detail_data['rider_name'] = db_order.rider_name
+                if 'vehicle_registration' in protected_fields:
+                    order_detail_data['vehicle_registration'] = db_order.vehicle_registration
+                if 'location_city' in protected_fields:
+                    if 'location' not in order_detail_data:
+                        order_detail_data['location'] = {}
+                    if 'address' not in order_detail_data['location']:
+                        order_detail_data['location']['address'] = {}
+                    order_detail_data['location']['address']['city'] = db_order.location_city
+
+                # Add modification tracking info
+                order_detail_data['is_modified'] = True
+                order_detail_data['modified_fields'] = db_order.modified_fields
+                order_detail_data['last_modified_by'] = db_order.last_modified_by
+                order_detail_data['last_modified_at'] = db_order.last_modified_at.isoformat() if db_order.last_modified_at else None
+
+            elif order_detail_data.get('_is_task_format'):
+                # Order not manually modified - prefer task API data for status (most accurate)
                 task_status = order_detail_data.get('order_status')
-                logger.info(f"Using task status '{task_status}' over database status '{db_order.order_status}'")
+                logger.info(f"Using task status '{task_status}' over database status '{db_order.order_status}' (no manual edits)")
 
                 # Ensure all status fields are consistent with task data
                 order_detail_data['order_status'] = task_status

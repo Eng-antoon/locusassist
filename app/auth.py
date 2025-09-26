@@ -125,8 +125,10 @@ class LocusAuth:
             try:
                 db.session.commit()
                 logger.info(f"Successfully cached {len(orders)} orders to database")
+                return True
             except Exception as commit_error:
                 logger.warning(f"Could not commit to database: {commit_error}")
+                return False
 
         except Exception as e:
             logger.error(f"Error caching orders to database: {e}")
@@ -134,29 +136,57 @@ class LocusAuth:
                 db.session.rollback()
             except:
                 pass  # In case there's no valid session
+            return False
 
     def clear_orders_cache(self, client_id, date_str):
-        """Clear cached orders from database for a specific date"""
+        """Clear cached orders from database for a specific date, preserving manually modified orders"""
         try:
             from models import OrderLineItem
             order_date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-            # First, find all orders for this date and client
-            orders_to_delete = Order.query.filter_by(client_id=client_id, date=order_date).all()
-            order_ids = [order.id for order in orders_to_delete]
+            # Find all orders for this date and client
+            all_orders = Order.query.filter_by(client_id=client_id, date=order_date).all()
 
-            if not order_ids:
+            if not all_orders:
                 logger.info(f"No orders found to clear for date {date_str}")
                 return True
 
-            # Delete related OrderLineItems first to avoid foreign key constraints
-            line_items_deleted = OrderLineItem.query.filter(OrderLineItem.order_id.in_(order_ids)).delete(synchronize_session=False)
+            # Separate orders into modified and unmodified
+            unmodified_orders = []
+            modified_orders = []
 
-            # Then delete the orders
-            orders_deleted = Order.query.filter_by(client_id=client_id, date=order_date).delete()
+            for order in all_orders:
+                if order.is_modified:
+                    modified_orders.append(order)
+                else:
+                    unmodified_orders.append(order)
+
+            # Only delete unmodified orders to preserve manual edits
+            unmodified_order_ids = [order.id for order in unmodified_orders]
+
+            if not unmodified_order_ids:
+                logger.info(f"No unmodified orders to clear for date {date_str}. {len(modified_orders)} modified orders preserved.")
+                return True
+
+            # Delete related OrderLineItems for unmodified orders only
+            line_items_deleted = 0
+            if unmodified_order_ids:
+                line_items_deleted = OrderLineItem.query.filter(OrderLineItem.order_id.in_(unmodified_order_ids)).delete(synchronize_session=False)
+
+            # Delete only unmodified orders
+            orders_deleted = 0
+            for order in unmodified_orders:
+                db.session.delete(order)
+                orders_deleted += 1
 
             db.session.commit()
-            logger.info(f"Cleared {orders_deleted} cached orders and {line_items_deleted} line items for date {date_str}")
+
+            logger.info(f"EDIT PRESERVATION: Cleared {orders_deleted} unmodified orders and {line_items_deleted} line items for date {date_str}")
+            if modified_orders:
+                logger.info(f"EDIT PRESERVATION: Preserved {len(modified_orders)} manually modified orders from cache clearing")
+                modified_order_ids = [order.id for order in modified_orders]
+                logger.info(f"EDIT PRESERVATION: Protected order IDs: {modified_order_ids}")
+
             return True
         except Exception as e:
             logger.error(f"Error clearing orders cache: {e}")
@@ -183,23 +213,74 @@ class LocusAuth:
 
             for order in orders:
                 try:
-                    order_dict = json.loads(order.raw_data) if order.raw_data else {}
+                    # Use current database fields (including manual edits) instead of raw_data
+                    # This ensures that manual edits are reflected in the orders homepage
+                    order_dict = order.to_dict()
 
+                    # Convert to the API format expected by frontend
+                    # Map database fields to API format
+                    api_order = {
+                        'id': order_dict['id'],
+                        'orderStatus': order_dict['order_status'],
+                        'date': order_dict['date'],
+                        'location': {
+                            'name': order_dict['location_name'],
+                            'address': {
+                                'formattedAddress': order_dict['location_address'],
+                                'city': order_dict['location_city'],
+                                'countryCode': order_dict['location_country_code']
+                            },
+                            'latLng': {
+                                'lat': order_dict['location_latitude'],
+                                'lng': order_dict['location_longitude']
+                            }
+                        },
+                        'orderMetadata': {
+                            'tourDetail': {
+                                'tourId': order_dict['tour_id'],
+                                'riderName': order_dict['rider_name'],
+                                'vehicleRegistrationNumber': order_dict['vehicle_registration']
+                            }
+                        },
+                        'rider_name': order_dict['rider_name'],
+                        'rider_id': order_dict['rider_id'],
+                        'rider_phone': order_dict['rider_phone'],
+                        'vehicle_registration': order_dict['vehicle_registration'],
+                        'vehicle_id': order_dict['vehicle_id'],
+                        'vehicle_model': order_dict['vehicle_model'],
+                        'transporter_name': order_dict['transporter_name'],
+                        'completed_on': order_dict['completed_on'],
+                        'cancellation_reason': order_dict['cancellation_reason'],
+                        'tardiness': order_dict['tardiness'],
+                        'sla_status': order_dict['sla_status'],
+                        'amount_collected': order_dict['amount_collected'],
+                        'effective_tat': order_dict['effective_tat'],
+                        'allowed_dwell_time': order_dict['allowed_dwell_time'],
+                        'task_time_slot': order_dict['task_time_slot'],
+                        'skills': order_dict['skills'],
+                        'tags': order_dict['tags'],
+                        'custom_fields': order_dict['custom_fields'],
+                        # Add modification tracking info for frontend
+                        'is_modified': order_dict['is_modified'],
+                        'modified_fields': order_dict['modified_fields'],
+                        'last_modified_by': order_dict['last_modified_by'],
+                        'last_modified_at': order_dict['last_modified_at']
+                    }
 
                     # If specific statuses requested, filter the cached data
                     if cache_key_suffix != "ALL":
                         requested_statuses = cache_key_suffix.split("_")
-                        if order_dict.get('orderStatus') not in requested_statuses:
+                        if api_order.get('orderStatus') not in requested_statuses:
                             continue
 
-                    orders_data.append(order_dict)
+                    orders_data.append(api_order)
 
                     # Calculate status totals
-                    status = order_dict.get('orderStatus', 'UNKNOWN')
+                    status = api_order.get('orderStatus', 'UNKNOWN')
                     status_totals[status] = status_totals.get(status, 0) + 1
 
-                except:
-                    logger.error(f"Error parsing cached order data for {order.id}")
+                except Exception as e:
+                    logger.error(f"Error converting cached order data for {order.id}: {e}")
                     continue
 
             # If after filtering we have no orders, return None to force fresh fetch

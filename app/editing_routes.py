@@ -18,6 +18,17 @@ class EditingService:
     def __init__(self):
         pass
 
+    def invalidate_filter_cache(self):
+        """Invalidate the filter service cache after order/tour modifications"""
+        try:
+            from app.filters import filter_service
+            if hasattr(filter_service, '_filter_cache'):
+                filter_service._filter_cache.clear()
+                logger.info("Filter service cache invalidated after modification")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate filter cache: {e}")
+            # Not critical - continue without error
+
     def track_field_modification(self, record, field_name, new_value, modified_by):
         """Track a field modification in the database"""
         try:
@@ -80,6 +91,9 @@ class EditingService:
 
             # Save tour changes
             db.session.commit()
+
+            # Invalidate filter cache since tour data has changed
+            self.invalidate_filter_cache()
 
             # Propagate changes to all orders in this tour if requested
             propagated_orders = 0
@@ -195,6 +209,9 @@ class EditingService:
 
                 db.session.commit()
 
+                # Invalidate filter cache since orders were propagated
+                self.invalidate_filter_cache()
+
             return {
                 'success': True,
                 'message': f'Tour updated successfully. {len(updated_fields)} fields modified.',
@@ -283,6 +300,9 @@ class EditingService:
 
             # Save changes
             db.session.commit()
+
+            # Invalidate filter cache since order data has changed
+            self.invalidate_filter_cache()
 
             return {
                 'success': True,
@@ -394,6 +414,9 @@ class EditingService:
             self.track_field_modification(order, 'line_items', f"Updated {results['added']} line items", modified_by)
 
             db.session.commit()
+
+            # Invalidate filter cache since order line items have changed
+            self.invalidate_filter_cache()
 
             logger.info(f"Updated line items for order {order_id}: {results['added']} items by {modified_by}")
 
@@ -782,6 +805,9 @@ def register_editing_routes(app):
 
             # Save changes
             db.session.commit()
+
+            # Invalidate filter cache since transaction details have changed
+            editing_service.invalidate_filter_cache()
 
             logger.info(f"Updated transaction details for order {order_id}: {updated_items} items updated by {modified_by}")
 
