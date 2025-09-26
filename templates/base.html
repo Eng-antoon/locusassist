@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Locus Assistant{% endblock %}</title>
+    <!-- Prevent page caching -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <!-- Modern Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,6 +44,11 @@
                     <li class="nav-item">
                         <a class="nav-link {{ 'active' if request.endpoint == 'tours_dashboard' }}" href="{{ url_for('tours_dashboard') }}">
                             <i class="fas fa-route me-1"></i>Tours
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'heatmap_dashboard' }}" href="{{ url_for('heatmap_dashboard') }}">
+                            <i class="fas fa-map-marked-alt me-1"></i>Heatmap
                         </a>
                     </li>
                 </ul>

@@ -1,0 +1,1109 @@
+{% extends "base.html" %}
+
+{% block title %}Delivery Heatmap - Locus Assistant{% endblock %}
+
+{% block content %}
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>{{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Modern Header Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h1 class="text-gradient mb-2">
+                    <i class="fas fa-map-marked-alt me-3"></i>Delivery Heatmap
+                </h1>
+                <p class="text-muted mb-0">Visualize delivery distribution and density across locations</p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-end">
+                    <small class="text-muted d-block">Last Updated</small>
+                    <span class="fw-semibold" id="last-updated">--:--:--</span>
+                </div>
+                <button class="btn btn-primary btn-icon hover-lift" onclick="refreshHeatmap()">
+                    <i class="fas fa-sync-alt" id="refresh-icon"></i>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="order-stats-grid mb-4" id="heatmap-stats-grid">
+    <!-- Statistics cards will be populated by JavaScript -->
+</div>
+
+<!-- Heatmap Controls Panel -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="filters-panel">
+            <div class="filters-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-sliders-h me-2"></i>
+                    Heatmap Controls
+                </h6>
+                <button class="btn btn-sm btn-outline-primary" type="button" id="controls-toggle">
+                    <i class="fas fa-chevron-down" id="controls-chevron"></i>
+                    <span class="ms-1" id="controls-toggle-text">Show Controls</span>
+                </button>
+            </div>
+
+            <!-- Controls Content -->
+            <div id="controls-content" style="display: none;" class="filters-body">
+                <div class="row g-4">
+                    <!-- Date and Info -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-calendar me-2"></i>Date & Settings
+                            </h6>
+
+                            <!-- Date Display (Read-only) -->
+                            <div class="mb-3">
+                                <label class="form-label">Date (from Orders Page)</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="display-date" readonly
+                                           value="{{ selected_date }}" style="background-color: #f8f9fa;">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-lock text-muted" title="Date follows Orders page selection"></i>
+                                    </span>
+                                </div>
+                                <small class="text-muted">Date automatically follows your Orders page selection</small>
+                            </div>
+
+                            <!-- Aggregation Level -->
+                            <div class="mb-3">
+                                <label class="form-label">Aggregation Level</label>
+                                <select class="form-select" id="aggregation-level">
+                                    <option value="coordinate">Exact Coordinates</option>
+                                    <option value="area" selected>By Area/Location</option>
+                                    <option value="city">By City</option>
+                                </select>
+                                <small class="text-muted">Choose how to group delivery locations</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Map Controls -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-map me-2"></i>Map Controls
+                            </h6>
+
+                            <!-- Heatmap Intensity -->
+                            <div class="mb-3">
+                                <label class="form-label">Heatmap Intensity</label>
+                                <input type="range" class="form-range" id="intensity-slider"
+                                       min="0.1" max="2.0" step="0.1" value="1.0">
+                                <div class="d-flex justify-content-between">
+                                    <small class="text-muted">Low</small>
+                                    <small class="text-muted" id="intensity-value">1.0</small>
+                                    <small class="text-muted">High</small>
+                                </div>
+                            </div>
+
+                            <!-- Show Options -->
+                            <div class="mb-3">
+                                <label class="form-label">Display Options</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="show-markers" checked>
+                                    <label class="form-check-label" for="show-markers">
+                                        Show location markers
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="show-heatmap" checked>
+                                    <label class="form-check-label" for="show-heatmap">
+                                        Show heatmap overlay
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-info-circle me-2"></i>Legend
+                            </h6>
+
+                            <div class="heatmap-legend">
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #ff0000;"></div>
+                                    <span>High delivery density</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #ffaa00;"></div>
+                                    <span>Medium delivery density</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-color" style="background: #00ff00;"></div>
+                                    <span>Low delivery density</span>
+                                </div>
+                                <div class="legend-item">
+                                    <div class="legend-marker">
+                                        <i class="fas fa-map-marker-alt" style="color: #007bff;"></i>
+                                    </div>
+                                    <span>Delivery locations</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <strong>Tip:</strong> Click on markers for detailed delivery information.
+                                    Use the controls to adjust visualization.
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Control Actions -->
+                <div class="filters-actions mt-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-primary" id="apply-controls-btn">
+                                <i class="fas fa-sync me-1"></i>
+                                Update Heatmap
+                            </button>
+                            <button class="btn btn-outline-secondary" id="reset-view-btn">
+                                <i class="fas fa-home me-1"></i>
+                                Reset View
+                            </button>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-info" id="fullscreen-btn">
+                                <i class="fas fa-expand" id="fullscreen-icon"></i>
+                                <span id="fullscreen-text">Fullscreen</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Messages Container -->
+        <div id="control-messages" class="mt-3"></div>
+    </div>
+</div>
+
+<!-- Map Container -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div id="heatmap-container" style="height: 600px; position: relative;">
+                    <div id="loading-overlay" class="d-flex align-items-center justify-content-center position-absolute w-100 h-100" style="background: rgba(255,255,255,0.9); z-index: 1000;">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="text-muted">Loading heatmap data...</p>
+                        </div>
+                    </div>
+                    <div id="map" style="height: 100%; width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Location Details Modal -->
+<div class="modal fade" id="locationModal" tabindex="-1" aria-labelledby="locationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="locationModalLabel">
+                    <i class="fas fa-map-marker-alt me-2"></i>Location Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="locationModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading location details...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+
+<style>
+.heatmap-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+}
+
+.legend-marker {
+    width: 16px;
+    text-align: center;
+}
+
+.leaflet-popup-content {
+    margin: 8px;
+    line-height: 1.6;
+}
+
+.popup-header {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 4px;
+}
+
+.popup-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.popup-stat {
+    text-align: center;
+    padding: 4px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.popup-stat-value {
+    font-weight: 600;
+    color: #333;
+    display: block;
+}
+
+.popup-stat-label {
+    font-size: 0.8em;
+    color: #666;
+}
+
+#heatmap-container.fullscreen {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999;
+    background: white;
+}
+
+#heatmap-container.fullscreen #map {
+    height: 100vh !important;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script>
+// Load heatmap plugin with fallback
+(function loadHeatmapPlugin() {
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
+    script.onerror = function() {
+        console.warn('Primary heatmap plugin failed to load, trying fallback CDN...');
+        const fallbackScript = document.createElement('script');
+        fallbackScript.src = 'https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.min.js';
+        fallbackScript.onerror = function() {
+            console.warn('Heatmap plugin failed to load from all CDNs, using fallback visualization');
+        };
+        document.head.appendChild(fallbackScript);
+    };
+    document.head.appendChild(script);
+})();
+</script>
+
+<script>
+// Heatmap dashboard state
+let currentFilters = {
+    date: '{{ selected_date }}', // Initialize with server date
+    aggregation_level: 'area'
+};
+
+let map = null;
+let heatmapLayer = null;
+let markersLayer = null;
+let heatmapData = [];
+
+// Function to get the current date from the orders page (localStorage or default)
+function getOrdersPageDate() {
+    // Try to get the date from localStorage (set by orders page)
+    const ordersDate = localStorage.getItem('selectedDate');
+    if (ordersDate && ordersDate !== 'null' && ordersDate !== '') {
+        console.log('Using date from orders page localStorage:', ordersDate);
+        return ordersDate;
+    }
+
+    // Fallback to server-provided date
+    const serverDate = '{{ selected_date }}';
+    console.log('Using server-provided date:', serverDate);
+    return serverDate;
+}
+
+// Initialize heatmap dashboard
+document.addEventListener('DOMContentLoaded', async function() {
+    // Set the proper date first
+    currentFilters.date = getOrdersPageDate();
+    console.log('Initialized with date:', currentFilters.date);
+
+    initializeControlsPanel();
+    initializeMap();
+
+    // Force hide loading overlay after 3 seconds as fallback
+    setTimeout(() => {
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay && loadingOverlay.style.display !== 'none') {
+            console.log('Force hiding loading overlay after timeout');
+            loadingOverlay.style.display = 'none';
+        }
+    }, 3000);
+
+    // Update the displayed date from orders page
+    updateDisplayedDate();
+
+    // Load initial heatmap data
+    await loadHeatmapData();
+
+    // Update last updated time
+    updateLastUpdatedTime();
+
+    // Listen for storage events to update when orders page changes date
+    window.addEventListener('storage', async function(e) {
+        if (e.key === 'selectedDate' && e.newValue !== e.oldValue) {
+            console.log('Date changed in orders page from', e.oldValue, 'to', e.newValue);
+            currentFilters.date = e.newValue;
+            updateDisplayedDate();
+            // Reload heatmap data when date changes
+            await loadHeatmapData();
+        }
+    });
+
+    // Listen for page visibility changes to refresh when user returns to tab
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log('Tab became visible, refreshing heatmap...');
+            refreshHeatmap();
+        }
+    });
+});
+
+function initializeControlsPanel() {
+    // Toggle controls panel
+    const controlsToggle = document.getElementById('controls-toggle');
+    const controlsContent = document.getElementById('controls-content');
+    const chevron = document.getElementById('controls-chevron');
+    const toggleText = document.getElementById('controls-toggle-text');
+
+    controlsToggle.addEventListener('click', function() {
+        const isHidden = controlsContent.style.display === 'none';
+
+        if (isHidden) {
+            controlsContent.style.display = 'block';
+            chevron.className = 'fas fa-chevron-up';
+            toggleText.textContent = 'Hide Controls';
+        } else {
+            controlsContent.style.display = 'none';
+            chevron.className = 'fas fa-chevron-down';
+            toggleText.textContent = 'Show Controls';
+        }
+    });
+
+    // Control event handlers
+    document.getElementById('apply-controls-btn').addEventListener('click', applyControls);
+    document.getElementById('reset-view-btn').addEventListener('click', resetMapView);
+    document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
+
+    // Intensity slider
+    const intensitySlider = document.getElementById('intensity-slider');
+    const intensityValue = document.getElementById('intensity-value');
+
+    intensitySlider.addEventListener('input', function() {
+        intensityValue.textContent = this.value;
+    });
+
+    // Display options
+    document.getElementById('show-markers').addEventListener('change', toggleMarkers);
+    document.getElementById('show-heatmap').addEventListener('change', toggleHeatmapLayer);
+}
+
+function initializeMap() {
+    // Initialize Leaflet map
+    map = L.map('map').setView([28.6139, 77.2090], 10); // Default to Delhi
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Initialize layers
+    markersLayer = L.layerGroup().addTo(map);
+
+    // Hide loading overlay once map is ready
+    map.whenReady(function() {
+        console.log('Map is ready');
+        document.getElementById('loading-overlay').style.display = 'none';
+    });
+}
+
+function updateDisplayedDate() {
+    const displayDateField = document.getElementById('display-date');
+    if (displayDateField) {
+        displayDateField.value = currentFilters.date;
+    }
+}
+
+async function loadHeatmapData() {
+    try {
+        console.log('Loading heatmap data with filters:', currentFilters);
+        showLoading();
+
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+        params.append('aggregation_level', currentFilters.aggregation_level);
+
+        const apiUrl = `/api/heatmap?${params}`;
+        console.log('Fetching heatmap data from:', apiUrl);
+
+        const response = await fetch(apiUrl);
+        const result = await response.json();
+
+        console.log('Heatmap API response:', result);
+
+        if (result.success) {
+            heatmapData = result.heatmap_data;
+            displayHeatmapStats(result.statistics);
+
+            // Check if coordinate extraction is needed
+            if (result.needs_coordinate_extraction && result.orders_without_coordinates > 0) {
+                showCoordinateExtractionPrompt(result.orders_without_coordinates, currentFilters.date);
+            } else {
+                updateMapVisualization();
+            }
+            console.log('Loaded', heatmapData.length, 'heatmap points');
+        } else {
+            console.error('API error:', result.error);
+            showError('Failed to load heatmap data: ' + (result.error || 'Unknown error'));
+            heatmapData = [];
+            updateMapVisualization();
+        }
+
+    } catch (error) {
+        console.error('Error loading heatmap data:', error);
+        showError('Error loading heatmap data. Please try again.');
+        heatmapData = [];
+        updateMapVisualization();
+    } finally {
+        hideLoading();
+    }
+}
+
+function displayHeatmapStats(stats) {
+    const statsGrid = document.getElementById('heatmap-stats-grid');
+
+    statsGrid.innerHTML = `
+        <div class="stat-card hover-lift">
+            <div class="stat-icon">
+                <i class="fas fa-box"></i>
+            </div>
+            <div class="stat-value">${stats.total_orders || 0}</div>
+            <div class="stat-label">Total Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="stat-value">${stats.completed_orders || 0}</div>
+            <div class="stat-label">Completed Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(220, 53, 69, 0.1); color: var(--danger-color);">
+                <i class="fas fa-times-circle"></i>
+            </div>
+            <div class="stat-value">${stats.cancelled_orders || 0}</div>
+            <div class="stat-label">Cancelled Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="stat-value">${stats.pending_orders || 0}</div>
+            <div class="stat-label">Pending Orders</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(139, 69, 19, 0.1); color: #8b4513;">
+                <i class="fas fa-map-marker-alt"></i>
+            </div>
+            <div class="stat-value">${stats.unique_locations || 0}</div>
+            <div class="stat-label">Delivery Locations</div>
+        </div>
+
+        <div class="stat-card hover-lift">
+            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--primary-color);">
+                <i class="fas fa-percentage"></i>
+            </div>
+            <div class="stat-value">${stats.completion_rate || 0}%</div>
+            <div class="stat-label">Completion Rate</div>
+        </div>
+    `;
+}
+
+function updateMapVisualization() {
+    // Clear existing layers
+    if (heatmapLayer) {
+        map.removeLayer(heatmapLayer);
+    }
+    markersLayer.clearLayers();
+
+    if (!heatmapData || heatmapData.length === 0) {
+        // Center map on Egypt when no data
+        map.setView([30.0444, 31.2357], 10); // Cairo, Egypt
+        return;
+    }
+
+    // Add heatmap layer if enabled
+    if (document.getElementById('show-heatmap').checked) {
+        addHeatmapLayer();
+    }
+
+    // Add markers if enabled
+    if (document.getElementById('show-markers').checked) {
+        addMarkers();
+    }
+
+    // Fit map to data bounds if we have data
+    if (heatmapData.length > 0) {
+        const bounds = L.latLngBounds(heatmapData.map(point => [point.latitude, point.longitude]));
+        map.fitBounds(bounds, { padding: [20, 20] });
+    }
+}
+
+function addHeatmapLayer() {
+    if (!heatmapData || heatmapData.length === 0) return;
+
+    // Check if heatLayer plugin is available
+    if (typeof L.heatLayer !== 'function') {
+        console.warn('Leaflet heat layer plugin not available, using circle markers instead');
+        addHeatCircles();
+        return;
+    }
+
+    const intensity = parseFloat(document.getElementById('intensity-slider').value);
+
+    // Prepare heatmap data points
+    const heatPoints = heatmapData.map(point => [
+        point.latitude,
+        point.longitude,
+        point.intensity * intensity
+    ]);
+
+    try {
+        // Create heatmap layer
+        heatmapLayer = L.heatLayer(heatPoints, {
+            radius: 25,
+            blur: 15,
+            maxZoom: 18,
+            max: Math.max(...heatmapData.map(p => p.intensity)) * intensity
+        }).addTo(map);
+    } catch (error) {
+        console.error('Error creating heatmap layer:', error);
+        addHeatCircles();
+    }
+}
+
+function addHeatCircles() {
+    // Fallback: Use circle markers with varying opacity instead of heatmap
+    if (!heatmapData || heatmapData.length === 0) return;
+
+    const intensity = parseFloat(document.getElementById('intensity-slider').value);
+    const maxIntensity = Math.max(...heatmapData.map(p => p.intensity));
+
+    heatmapData.forEach(point => {
+        const normalizedIntensity = (point.intensity / maxIntensity) * intensity;
+        const radius = Math.min(Math.max(normalizedIntensity * 30, 5), 50);
+        const opacity = Math.min(Math.max(normalizedIntensity, 0.3), 0.8);
+
+        // Color based on intensity (red for high, yellow for medium, green for low)
+        let color = '#00ff00'; // Green for low
+        if (normalizedIntensity > 0.6) {
+            color = '#ff0000'; // Red for high
+        } else if (normalizedIntensity > 0.3) {
+            color = '#ffaa00'; // Orange for medium
+        }
+
+        const circle = L.circle([point.latitude, point.longitude], {
+            color: color,
+            fillColor: color,
+            fillOpacity: opacity,
+            radius: radius * 20 // Scale for visibility
+        });
+
+        if (!heatmapLayer) {
+            heatmapLayer = L.layerGroup();
+        }
+        heatmapLayer.addLayer(circle);
+    });
+
+    if (heatmapLayer) {
+        heatmapLayer.addTo(map);
+    }
+}
+
+function addMarkers() {
+    if (!heatmapData || heatmapData.length === 0) return;
+
+    heatmapData.forEach(point => {
+        // Create marker icon based on delivery status
+        let markerColor = '#007bff'; // Default blue
+        if (point.completion_rate >= 80) {
+            markerColor = '#28a745'; // Green for high completion
+        } else if (point.completion_rate >= 50) {
+            markerColor = '#ffc107'; // Yellow for medium completion
+        } else {
+            markerColor = '#dc3545'; // Red for low completion
+        }
+
+        // Create marker
+        const marker = L.circleMarker([point.latitude, point.longitude], {
+            radius: Math.min(Math.max(point.order_count / 2, 5), 20),
+            fillColor: markerColor,
+            color: 'white',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+        });
+
+        // Create popup content
+        const popupContent = createPopupContent(point);
+        marker.bindPopup(popupContent);
+
+        // Add click handler for detailed view
+        marker.on('click', function() {
+            showLocationDetails(point.latitude, point.longitude, point.location_name);
+        });
+
+        markersLayer.addLayer(marker);
+    });
+}
+
+function createPopupContent(point) {
+    const locationName = point.location_name || point.area_name || point.city_name || 'Unknown Location';
+
+    return `
+        <div class="popup-header">
+            <i class="fas fa-map-marker-alt me-1"></i>
+            ${locationName}
+        </div>
+
+        <div class="popup-stats">
+            <div class="popup-stat">
+                <span class="popup-stat-value">${point.order_count}</span>
+                <span class="popup-stat-label">Orders</span>
+            </div>
+            <div class="popup-stat">
+                <span class="popup-stat-value">${point.completion_rate}%</span>
+                <span class="popup-stat-label">Completed</span>
+            </div>
+            <div class="popup-stat">
+                <span class="popup-stat-value">${point.total_quantity}</span>
+                <span class="popup-stat-label">Total Items</span>
+            </div>
+            <div class="popup-stat">
+                <span class="popup-stat-value">${point.delivered_quantity}</span>
+                <span class="popup-stat-label">Delivered</span>
+            </div>
+        </div>
+
+        <div class="text-center mt-2">
+            <small class="text-muted">Click marker for detailed information</small>
+        </div>
+    `;
+}
+
+async function showLocationDetails(latitude, longitude, locationName) {
+    const modal = new bootstrap.Modal(document.getElementById('locationModal'));
+    const modalTitle = document.getElementById('locationModalLabel');
+    const modalBody = document.getElementById('locationModalBody');
+
+    modalTitle.innerHTML = `<i class="fas fa-map-marker-alt me-2"></i>${locationName || 'Location Details'}`;
+    modalBody.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading location details...</p>
+        </div>
+    `;
+
+    modal.show();
+
+    try {
+        const response = await fetch(`/api/heatmap/location-details?latitude=${latitude}&longitude=${longitude}`);
+        const result = await response.json();
+
+        if (result.success) {
+            modalBody.innerHTML = createLocationDetailsContent(result);
+        } else {
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Failed to load location details: ${result.error || 'Unknown error'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading location details:', error);
+        modalBody.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Error loading location details. Please try again.
+            </div>
+        `;
+    }
+}
+
+function createLocationDetailsContent(data) {
+    const { orders, summary } = data;
+
+    let content = `
+        <!-- Summary Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h6 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Delivery Summary</h6>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="text-center p-2 bg-light rounded">
+                            <div class="fw-bold text-primary">${summary.order_count}</div>
+                            <small class="text-muted">Total Orders</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center p-2 bg-light rounded">
+                            <div class="fw-bold text-success">${summary.completed_orders}</div>
+                            <small class="text-muted">Completed</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center p-2 bg-light rounded">
+                            <div class="fw-bold text-warning">${summary.total_quantity}</div>
+                            <small class="text-muted">Total Items</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center p-2 bg-light rounded">
+                            <div class="fw-bold text-info">${summary.delivery_rate}%</div>
+                            <small class="text-muted">Delivery Rate</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (orders && orders.length > 0) {
+        content += `
+            <!-- Orders List -->
+            <div class="row">
+                <div class="col-12">
+                    <h6 class="mb-3"><i class="fas fa-list me-2"></i>Order Details</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Status</th>
+                                    <th>Location</th>
+                                    <th>Items</th>
+                                    <th>Rider</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+
+        orders.slice(0, 10).forEach(order => {
+            const statusClass = order.status === 'COMPLETED' ? 'success' :
+                              order.status === 'CANCELLED' ? 'danger' : 'warning';
+
+            const itemsCount = order.line_items ? order.line_items.length : 0;
+            const totalQuantity = order.line_items ?
+                order.line_items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
+
+            content += `
+                <tr>
+                    <td>
+                        <small class="font-monospace">${order.id.length > 12 ? order.id.substring(0, 12) + '...' : order.id}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-${statusClass}">${order.status}</span>
+                    </td>
+                    <td>
+                        <small>${order.location_name || 'N/A'}</small>
+                    </td>
+                    <td>
+                        <small>${itemsCount} items (${totalQuantity} qty)</small>
+                    </td>
+                    <td>
+                        <small>${order.rider_name || 'N/A'}</small>
+                    </td>
+                </tr>
+            `;
+        });
+
+        content += `
+                            </tbody>
+                        </table>
+                    </div>
+        `;
+
+        if (orders.length > 10) {
+            content += `<p class="text-muted small">Showing first 10 orders out of ${orders.length} total orders.</p>`;
+        }
+
+        content += `
+                </div>
+            </div>
+        `;
+    }
+
+    return content;
+}
+
+function applyControls() {
+    // Update filters
+    currentFilters.aggregation_level = document.getElementById('aggregation-level').value;
+
+    // Reload heatmap data with new settings
+    loadHeatmapData();
+
+    showSuccess('Heatmap updated successfully');
+}
+
+function resetMapView() {
+    if (map && heatmapData.length > 0) {
+        const bounds = L.latLngBounds(heatmapData.map(point => [point.latitude, point.longitude]));
+        map.fitBounds(bounds, { padding: [20, 20] });
+    }
+}
+
+function toggleMarkers() {
+    if (document.getElementById('show-markers').checked) {
+        addMarkers();
+    } else {
+        markersLayer.clearLayers();
+    }
+}
+
+function toggleHeatmapLayer() {
+    if (document.getElementById('show-heatmap').checked) {
+        addHeatmapLayer();
+    } else if (heatmapLayer) {
+        map.removeLayer(heatmapLayer);
+        heatmapLayer = null;
+    }
+}
+
+function toggleFullscreen() {
+    const container = document.getElementById('heatmap-container');
+    const button = document.getElementById('fullscreen-btn');
+    const icon = document.getElementById('fullscreen-icon');
+    const text = document.getElementById('fullscreen-text');
+
+    if (container.classList.contains('fullscreen')) {
+        container.classList.remove('fullscreen');
+        icon.className = 'fas fa-expand';
+        text.textContent = 'Fullscreen';
+        document.body.style.overflow = '';
+    } else {
+        container.classList.add('fullscreen');
+        icon.className = 'fas fa-compress';
+        text.textContent = 'Exit Fullscreen';
+        document.body.style.overflow = 'hidden';
+    }
+
+    // Trigger map resize
+    setTimeout(() => {
+        if (map) {
+            map.invalidateSize();
+        }
+    }, 100);
+}
+
+async function refreshHeatmap() {
+    await loadHeatmapData();
+    updateLastUpdatedTime();
+    showSuccess('Heatmap refreshed successfully');
+}
+
+function showLoading() {
+    document.getElementById('loading-overlay').style.display = 'flex';
+}
+
+function hideLoading() {
+    document.getElementById('loading-overlay').style.display = 'none';
+}
+
+function showError(message) {
+    const messagesDiv = document.getElementById('control-messages');
+    messagesDiv.innerHTML = `
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-exclamation-triangle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+}
+
+function showSuccess(message) {
+    const messagesDiv = document.getElementById('control-messages');
+    messagesDiv.innerHTML = `
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-check-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+        const alert = messagesDiv.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 3000);
+}
+
+function showInfo(message) {
+    const messagesDiv = document.getElementById('control-messages');
+    messagesDiv.innerHTML = `
+        <div class="alert alert-info alert-dismissible fade show">
+            <i class="fas fa-info-circle me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+}
+
+function updateLastUpdatedTime() {
+    const now = new Date();
+    document.getElementById('last-updated').textContent = now.toLocaleTimeString();
+}
+
+function showCoordinateExtractionPrompt(ordersCount, date) {
+    const messagesDiv = document.getElementById('control-messages');
+    messagesDiv.innerHTML = `
+        <div class="alert alert-warning alert-dismissible fade show">
+            <i class="fas fa-map-marker-alt me-2"></i>
+            <strong>Location Coordinates Missing</strong><br>
+            Found ${ordersCount} orders for ${date} without location coordinates.
+            <br><small class="text-muted">Click "Extract Coordinates" to fetch location data from the Locus API.</small>
+            <div class="mt-2">
+                <button class="btn btn-warning btn-sm me-2" onclick="extractCoordinatesForDate('${date}')">
+                    <i class="fas fa-download me-1"></i>Extract Coordinates
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="dismissCoordinatePrompt()">
+                    <i class="fas fa-times me-1"></i>Show Map Anyway
+                </button>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" onclick="updateMapVisualization()"></button>
+        </div>
+    `;
+}
+
+function dismissCoordinatePrompt() {
+    document.getElementById('control-messages').innerHTML = '';
+    updateMapVisualization();
+}
+
+async function extractCoordinatesForDate(date) {
+    const extractButton = document.querySelector('button[onclick*="extractCoordinatesForDate"]');
+    if (extractButton) {
+        extractButton.disabled = true;
+        extractButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Extracting...';
+    }
+
+    try {
+        showInfo('Extracting coordinates from Locus API. This may take a few minutes...');
+
+        const response = await fetch('/api/orders/extract-coordinates', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                date: date,
+                limit: 50  // Process up to 50 orders at a time to avoid timeout
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showSuccess(`Successfully extracted coordinates for ${result.updated_count} orders! Refreshing heatmap...`);
+
+            // Reload heatmap data after successful extraction
+            setTimeout(async () => {
+                await loadHeatmapData();
+            }, 1500);
+        } else {
+            showError(`Failed to extract coordinates: ${result.error || 'Unknown error'}`);
+            updateMapVisualization(); // Show map anyway
+        }
+
+    } catch (error) {
+        console.error('Error extracting coordinates:', error);
+        showError('Error extracting coordinates. Please try again.');
+        updateMapVisualization(); // Show map anyway
+    } finally {
+        if (extractButton) {
+            extractButton.disabled = false;
+            extractButton.innerHTML = '<i class="fas fa-download me-1"></i>Extract Coordinates';
+        }
+    }
+}
+
+// Auto-refresh every 5 minutes
+setInterval(refreshHeatmap, 300000);
+</script>
+{% endblock %}

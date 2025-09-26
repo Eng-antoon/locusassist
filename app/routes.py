@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for, session, flash, jsonify
+from flask import render_template, request, redirect, url_for, session, flash, jsonify, make_response
 from datetime import datetime
 import json
 import logging
@@ -64,6 +64,28 @@ def transform_task_to_order_format(task_data):
             chosen_location = customer_visit.get('chosenLocation', {})
             address = chosen_location.get('address', {})
 
+            # Extract coordinates from multiple possible sources
+            lat_lng = {}
+
+            # Priority 1: Check customerVisit.location.latLng (from task-search API)
+            visit_location = customer_visit.get('location', {})
+            if visit_location and isinstance(visit_location, dict):
+                visit_lat_lng = visit_location.get('latLng', {})
+                if visit_lat_lng and isinstance(visit_lat_lng, dict):
+                    lat_lng = visit_lat_lng
+                    logger.info(f"Found coordinates in customerVisit.location.latLng for task {task_data.get('taskId')}: {lat_lng}")
+
+            # Priority 2: Check chosenLocation.geometry.latLng (alternative path)
+            if not lat_lng:
+                geometry_lat_lng = chosen_location.get('geometry', {}).get('latLng', {})
+                if geometry_lat_lng and isinstance(geometry_lat_lng, dict):
+                    lat_lng = geometry_lat_lng
+                    logger.info(f"Found coordinates in chosenLocation.geometry.latLng for task {task_data.get('taskId')}: {lat_lng}")
+
+            # Log if no coordinates found
+            if not lat_lng:
+                logger.warning(f"No coordinates found for task {task_data.get('taskId')} - visit_location: {visit_location}, chosen_location: {chosen_location}")
+
             # Create location structure
             order_data['location'] = {
                 'id': customer_visit.get('locationId', {}).get('locationId'),
@@ -76,7 +98,7 @@ def transform_task_to_order_format(task_data):
                     'countryCode': address.get('countryCode', ''),
                     'pincode': address.get('pincode', '')
                 },
-                'latLng': chosen_location.get('geometry', {}).get('latLng', {})
+                'latLng': lat_lng
             }
 
             # Extract performance metrics
@@ -167,8 +189,12 @@ def store_order_from_api_data(order_data, date_str):
                 lng = latLng.get('lng') or latLng.get('longitude')
                 if lat is not None:
                     new_order.location_latitude = float(lat)
+                    logger.info(f"Stored latitude {lat} for order {order_data.get('id')}")
                 if lng is not None:
                     new_order.location_longitude = float(lng)
+                    logger.info(f"Stored longitude {lng} for order {order_data.get('id')}")
+            else:
+                logger.warning(f"No coordinates found for order {order_data.get('id')} - latLng: {latLng}")
 
         # Cancellation information
         new_order.cancellation_reason = order_data.get('cancellation_reason')
@@ -399,22 +425,47 @@ def register_routes(app, config):
             order_statuses = [selected_order_status.upper()]
 
         # Use filter service for cached data retrieval
+        # Get pagination parameters from URL (for per_page dropdown support)
+        requested_per_page = request.args.get('per_page', type=int)
+        requested_page = request.args.get('page', 1, type=int)
+
+        # For date ranges, show more results per page to ensure all dates are visible
+        is_date_range = start_date != end_date
+
+        if requested_per_page:
+            # User selected a specific per_page value (from dropdown)
+            page_size = requested_per_page
+        else:
+            # Default based on date range
+            page_size = 500 if is_date_range else 50
+
         filter_data = {
             'date_from': start_date,
             'date_to': end_date,
-            'order_status': selected_order_status if selected_order_status != 'all' else None
+            'order_status': selected_order_status if selected_order_status != 'all' else None,
+            'page': requested_page,
+            'per_page': page_size
         }
 
-        # Apply filters to get cached data
-        filter_result = filter_service.apply_filters(filter_data)
+        # Apply filters to get cached data (pass config for bearer token access)
+        filter_result = filter_service.apply_filters(filter_data, config)
 
         if filter_result.get('success', False):
+            # Log results for debugging
+            orders_count = len(filter_result.get('orders', []))
+            total_count = filter_result.get('total_count', 0)
+            status_totals = filter_result.get('status_totals', {})
+
+            logger.info(f"Dashboard filter results: {orders_count} orders shown, {total_count} total, page_size={page_size}")
+            logger.info(f"Date range: {start_date} to {end_date} (is_range: {is_date_range})")
+            logger.info(f"Status totals: {status_totals}")
+
             # Transform filter result to match expected orders_data format
             orders_data = {
                 'orders': filter_result['orders'],
                 'totalCount': filter_result['total_count'],
                 'statusTotals': filter_result.get('status_totals', {}),
-                'pagesFetched': 'Cached data'
+                'pagesFetched': f'Cached data ({page_size} per page)'
             }
         else:
             # Fallback to API if filter service fails
@@ -497,15 +548,22 @@ def register_routes(app, config):
                             'has_validation': False
                         }
 
-        return render_template('dashboard.html',
-                             orders_data=orders_data,
-                             selected_date=selected_date,
-                             date_from=date_from,
-                             date_to=date_to,
-                             date_display=date_display,
-                             selected_order_status=selected_order_status,
-                             username='Amin',
-                             fetch_all=fetch_all)
+        response = make_response(render_template('dashboard.html',
+                                orders_data=orders_data,
+                                selected_date=selected_date,
+                                date_from=date_from,
+                                date_to=date_to,
+                                date_display=date_display,
+                                selected_order_status=selected_order_status,
+                                username='Amin',
+                                fetch_all=fetch_all))
+
+        # Add cache-busting headers to prevent browser caching of dashboard data
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
+        return response
 
     @app.route('/api/orders')
     def api_orders():
@@ -526,7 +584,14 @@ def register_routes(app, config):
             order_statuses=order_statuses
         )
 
-        return jsonify(orders_data or {'error': 'Failed to fetch orders'})
+        response = make_response(jsonify(orders_data or {'error': 'Failed to fetch orders'}))
+
+        # Add cache-busting headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
+        return response
 
     @app.route('/api/refresh-orders', methods=['POST'])
     def refresh_orders():
@@ -565,7 +630,7 @@ def register_routes(app, config):
                 )
 
                 if result['success']:
-                    return jsonify({
+                    response = make_response(jsonify({
                         'success': True,
                         'message': f'✅ {result["message"]}',
                         'total_orders_refreshed': result['total_orders_refreshed'],
@@ -575,7 +640,14 @@ def register_routes(app, config):
                         'date_from': date_from,
                         'date_to': date_to,
                         'results': result['results']
-                    })
+                    }))
+
+                    # Add cache-busting headers
+                    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                    response.headers['Pragma'] = 'no-cache'
+                    response.headers['Expires'] = '0'
+
+                    return response
                 else:
                     return jsonify({
                         'success': False,
@@ -618,7 +690,7 @@ def register_routes(app, config):
                     if status_totals:
                         status_breakdown = " | Status breakdown: " + ", ".join([f"{status}: {count}" for status, count in status_totals.items()])
 
-                    return jsonify({
+                    response = make_response(jsonify({
                         'success': True,
                         'message': f'✅ Refreshed data from Locus API. Found {total_count} orders for {date}{status_breakdown}',
                         'total_orders_count': total_count,
@@ -626,7 +698,14 @@ def register_routes(app, config):
                         'order_status': order_status,
                         'status_totals': status_totals,
                         'orders': orders_data.get('orders', [])
-                    })
+                    }))
+
+                    # Add cache-busting headers
+                    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                    response.headers['Pragma'] = 'no-cache'
+                    response.headers['Expires'] = '0'
+
+                    return response
                 else:
                     return jsonify({
                         'success': False,
@@ -1364,8 +1443,8 @@ def register_routes(app, config):
             # Log the filter request for debugging
             logger.info(f"Filter request: {filters_data}")
 
-            # Apply filters using the filter service
-            result = filter_service.apply_filters(filters_data)
+            # Apply filters using the filter service (pass config for bearer token access)
+            result = filter_service.apply_filters(filters_data, config)
 
             if not result.get('success', False):
                 return jsonify({
@@ -1407,7 +1486,7 @@ def register_routes(app, config):
 
             result['orders'] = enhanced_orders
 
-            return jsonify({
+            response = make_response(jsonify({
                 'success': True,
                 'orders': result['orders'],
                 'total_count': result['total_count'],
@@ -1417,7 +1496,14 @@ def register_routes(app, config):
                 'status_totals': result.get('status_totals', {}),
                 'applied_filters': result.get('applied_filters', {}),
                 'message': f'Found {len(result["orders"])} orders matching filters'
-            }), 200
+            }), 200)
+
+            # Add cache-busting headers
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+
+            return response
 
         except Exception as e:
             logger.error(f"Error filtering orders: {e}")
@@ -1707,3 +1793,94 @@ def register_routes(app, config):
 
         result = tour_service.get_tour_details(tour_id)
         return jsonify(result)
+
+    # Heatmap Routes
+    @app.route('/heatmap')
+    def heatmap_dashboard():
+        """Heatmap dashboard page"""
+        from datetime import datetime
+
+        # Get today's date as default
+        today = datetime.now().strftime("%Y-%m-%d")
+        selected_date = request.args.get('date', today)
+
+        return render_template('heatmap.html', selected_date=selected_date)
+
+    @app.route('/api/heatmap')
+    def api_heatmap_data():
+        """API endpoint to get heatmap data"""
+        from app.heatmap import heatmap_service
+
+        date = request.args.get('date')
+        aggregation_level = request.args.get('aggregation_level', 'area')
+
+        result = heatmap_service.get_delivery_heatmap_data(
+            date=date,
+            aggregation_level=aggregation_level
+        )
+
+        return jsonify(result)
+
+    @app.route('/api/heatmap/location-details')
+    def api_heatmap_location_details():
+        """API endpoint to get detailed information for a specific location"""
+        from app.heatmap import heatmap_service
+
+        try:
+            latitude = float(request.args.get('latitude'))
+            longitude = float(request.args.get('longitude'))
+            radius = float(request.args.get('radius', 0.001))
+
+            result = heatmap_service.get_location_details(
+                latitude=latitude,
+                longitude=longitude,
+                radius=radius
+            )
+
+            return jsonify(result)
+
+        except (TypeError, ValueError) as e:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid coordinates provided',
+                'orders': [],
+                'summary': {}
+            }), 400
+
+    @app.route('/api/orders/extract-coordinates', methods=['POST'])
+    def api_extract_coordinates():
+        """API endpoint to extract coordinates for orders"""
+        try:
+            from app.coordinate_extractor import create_coordinate_extractor
+            from app.config import DevelopmentConfig
+
+            config = DevelopmentConfig()
+            extractor = create_coordinate_extractor(locus_auth)
+
+            date = request.json.get('date') if request.is_json else request.form.get('date')
+            limit = request.json.get('limit') if request.is_json else request.form.get('limit', type=int)
+
+            if not date:
+                return jsonify({
+                    'success': False,
+                    'error': 'Date parameter is required'
+                }), 400
+
+            # Use the configured bearer token
+            access_token = config.BEARER_TOKEN
+
+            # For API routes, we're already in application context, so we don't need to pass it
+            result = extractor.update_orders_by_date(
+                date=date,
+                access_token=access_token,
+                limit=limit
+            )
+
+            return jsonify(result)
+
+        except Exception as e:
+            logger.error(f"Error in coordinate extraction API: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500

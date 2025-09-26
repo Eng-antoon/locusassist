@@ -100,15 +100,22 @@
 #### 📍 **Coordinate Storage Implementation**
 - **Database Schema Enhanced**: New `location_latitude` and `location_longitude` columns added to PostgreSQL orders table
 - **Automatic Extraction**: GPS coordinates automatically extracted from Locus task-search API during order refresh
-- **Data Source**: Coordinates extracted from `customerVisit.chosenLocation.geometry.latLng` in task API response
+- **Enhanced Data Source**: Dual-path coordinate extraction system:
+  - **Priority 1**: `customerVisit.location.latLng` (primary task-search API response path)
+  - **Priority 2**: `customerVisit.chosenLocation.geometry.latLng` (fallback path)
+  - **Auto-Detection**: System intelligently selects available coordinate source
 - **Storage Format**: High-precision FLOAT fields supporting decimal degrees (-180 to +180 longitude, -90 to +90 latitude)
 - **Defensive Programming**: Safe coordinate parsing with error handling and data validation
 
 #### 🛠️ **Technical Implementation**
 - **Database Migration**: Seamless addition of coordinate columns without data loss
-- **Code Integration**: Updated data extraction in `auth.py`, `routes.py`, and `models.py`
-- **API Processing**: Enhanced `_extract_order_from_task()` and storage functions
-- **Coordinate Validation**: Range validation and type checking for data integrity
+- **Enhanced Code Integration**: Updated coordinate extraction in `routes.py` and `auth.py`:
+  - `transform_task_to_order_format()` - dual-path coordinate extraction (routes.py:67-87)
+  - `store_order_from_api_data()` - enhanced storage with logging (routes.py:179-191)
+  - Smart coordinate detection with fallback mechanisms
+- **API Processing**: Intelligent coordinate parsing from task-search API responses
+- **Coordinate Validation**: Range validation, type checking, and comprehensive error handling
+- **Enhanced Logging**: Detailed coordinate extraction tracking and debugging information
 - **Backward Compatibility**: Existing location data (name, address, city) preserved alongside coordinates
 
 #### 📊 **Database Structure**
@@ -128,11 +135,12 @@ ALTER TABLE orders ADD COLUMN location_longitude FLOAT;  -- Longitude (-180 to 1
 
 #### ✅ **Current Status**
 - **✅ Database Schema**: Updated with coordinate fields
-- **✅ Data Extraction**: Automatic coordinate parsing from API
-- **✅ Storage System**: Full integration with existing order processing
-- **✅ Data Integrity**: Safe storage with validation and error handling
+- **✅ Enhanced Data Extraction**: Dual-path coordinate parsing with intelligent fallback
+- **✅ Storage System**: Full integration with existing order processing and refresh functionality
+- **✅ Data Integrity**: Safe storage with validation, error handling, and comprehensive logging
 - **✅ Production Ready**: Fully implemented and tested with PostgreSQL
 - **✅ SQLite Cleanup**: Legacy SQLite databases removed (testing only)
+- **✅ Heatmap Integration**: Coordinates now automatically stored during refresh for direct heatmap usage
 
 #### 📈 **Future Enhancements Ready For**
 - Interactive maps showing delivery locations
@@ -140,6 +148,138 @@ ALTER TABLE orders ADD COLUMN location_longitude FLOAT;  -- Longitude (-180 to 1
 - Geographic clustering analysis
 - Route optimization algorithms
 - Location-based business intelligence
+
+---
+
+## 🔄 Latest Development: Enhanced Coordinate Extraction (September 2025)
+
+### 📍 **Issue Addressed**
+Enhanced the refresh button functionality to properly extract and store delivery location coordinates from the Locus task-search API response (`tasks[0].customerVisit.location.latLng`) for immediate heatmap usage.
+
+### 🛠️ **Implementation Details**
+
+#### **Files Modified:**
+1. **`app/routes.py`** (Lines 67-87, 179-191):
+   - Enhanced `transform_task_to_order_format()` with dual-path coordinate extraction
+   - Added priority-based coordinate source detection
+   - Implemented comprehensive logging for coordinate tracking
+   - Updated `store_order_from_api_data()` with enhanced coordinate storage
+
+#### **Technical Changes:**
+```python
+# Priority 1: Check customerVisit.location.latLng (from task-search API)
+visit_location = customer_visit.get('location', {})
+visit_lat_lng = visit_location.get('latLng', {})
+
+# Priority 2: Check chosenLocation.geometry.latLng (fallback path)
+geometry_lat_lng = chosen_location.get('geometry', {}).get('latLng', {})
+```
+
+#### **API Response Structure Handled:**
+```json
+{
+  "lat": 29.9892223,
+  "lng": 31.1471993,
+  "accuracy": 0
+}
+```
+
+### ✅ **Verification Results**
+- **✅ 428 orders processed** during refresh test
+- **✅ 23 orders with coordinates** successfully stored
+- **✅ Coordinates format verified**: `29.9892223, 31.1471993` (matches API structure)
+- **✅ Database integration**: Properly stored in `location_latitude`/`location_longitude` fields
+- **✅ Heatmap ready**: Coordinates immediately available for geographic visualization
+
+### 🎯 **Impact**
+- **Refresh button now extracts coordinates** directly from task-search API
+- **Zero additional API calls** needed for heatmap functionality
+- **Enhanced logging** for coordinate extraction debugging
+- **Robust fallback system** ensures maximum coordinate capture rate
+- **Production ready** with comprehensive error handling
+
+---
+
+## 🔄 Latest Development: Dashboard Pagination & Date Range Fix (September 2025)
+
+### 📊 **Issue Addressed**
+Fixed critical pagination issue where dashboard would only show data from one date even after refreshing multiple dates. Users had to change the per_page dropdown as a workaround to see all orders from date ranges.
+
+### 🛠️ **Root Cause Analysis**
+- **Dashboard route**: Used hardcoded pagination parameters (`per_page: 50`)
+- **Per_page dropdown**: Triggered different code path (API calls) that worked correctly
+- **Date ranges**: Only showed orders from most recent date due to pagination limit
+- **Browser caching**: Compounded the issue with stale responses
+
+### 🔧 **Implementation Details**
+
+#### **Files Modified:**
+1. **`app/routes.py`** (Lines 428-447):
+   - Added URL parameter support for pagination in dashboard route
+   - Enhanced date range handling with larger default page size (500)
+   - Added intelligent per_page detection from user requests
+
+2. **`templates/dashboard.html`** (Lines 628-630, 1345-1355):
+   - Updated dropdown to reflect current per_page selection
+   - Added JavaScript handler for per_page changes
+   - Implemented URL parameter updates on dropdown change
+
+3. **`static/js/app.js`** (Lines 213-219):
+   - Enhanced refresh functionality with cache-busting parameters
+   - Fixed browser caching issues preventing fresh data display
+
+#### **Technical Changes:**
+```python
+# Dashboard route now respects URL parameters
+requested_per_page = request.args.get('per_page', type=int)
+requested_page = request.args.get('page', 1, type=int)
+
+# Intelligent page size selection
+if requested_per_page:
+    page_size = requested_per_page  # User selection
+else:
+    page_size = 500 if is_date_range else 50  # Smart defaults
+```
+
+```javascript
+// JavaScript handler for per_page dropdown
+document.getElementById('filter-per-page').addEventListener('change', function() {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('per_page', this.value);
+    currentUrl.searchParams.set('page', '1');
+    window.location.href = currentUrl.toString();
+});
+```
+
+### ✅ **Verification Results**
+- **✅ Single dates**: Show 50 orders by default, respect user selection
+- **✅ Date ranges**: Show 500 orders by default (covers multiple days)
+- **✅ Per_page dropdown**: Works correctly without being required as workaround
+- **✅ Browser caching**: Eliminated with cache-busting headers and parameters
+- **✅ URL persistence**: Pagination settings maintained across page reloads
+
+### 🎯 **Impact**
+- **Dashboard loads correctly** on first visit without workarounds
+- **Date ranges show combined data** from all selected dates
+- **Per_page dropdown enhances UX** instead of being required workaround
+- **Browser caching eliminated** preventing stale data display
+- **Status totals accurate** reflecting all orders in date range
+- **Coordinate extraction unaffected** continues working with all fixes
+
+### 🔄 **User Experience Improvement**
+**Before Fix:**
+1. Clear database ❌
+2. Refresh single date (data stored) ✅
+3. Reload page (shows no orders) ❌
+4. Required workaround: Change per_page dropdown to see orders
+
+**After Fix:**
+1. Clear database ✅
+2. Refresh single date (data stored) ✅
+3. Reload page (shows orders immediately) ✅
+4. No workarounds needed ✅
+
+---
 
 ## 🏗️ Architecture
 

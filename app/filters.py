@@ -225,7 +225,7 @@ class OrderFilterService:
         import time
         return time.time() - cache_entry['timestamp'] < self._cache_timeout
 
-    def apply_filters(self, filters_data):
+    def apply_filters(self, filters_data, config=None):
         """
         Apply filters to order query and return filtered results
         Handles day-by-day API fetching for date ranges with missing database data
@@ -233,6 +233,7 @@ class OrderFilterService:
 
         Args:
             filters_data (dict): Filter criteria from the frontend
+            config: Application configuration (optional, will use current_app.config if not provided)
 
         Returns:
             dict: Filtered order results with metadata
@@ -274,12 +275,15 @@ class OrderFilterService:
             date_from = filters_data.get('date_from')
             date_to = filters_data.get('date_to')
 
+            # Use provided config or fall back to current_app.config
+            app_config = config if config is not None else getattr(current_app, 'config', None)
+
             if date_from and date_to:
                 # Check for missing data and fetch if needed
-                self._ensure_data_for_date_range(date_from, date_to, filters_data, current_app.config)
+                self._ensure_data_for_date_range(date_from, date_to, filters_data, app_config)
             elif date_from and not date_to:
                 # Single date filtering
-                self._ensure_data_for_date_range(date_from, date_from, filters_data, current_app.config)
+                self._ensure_data_for_date_range(date_from, date_from, filters_data, app_config)
 
             # Start with base query and order by date DESC for recent orders first
             query = db.session.query(Order).order_by(Order.date.desc(), Order.created_at.desc())

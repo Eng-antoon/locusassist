@@ -176,14 +176,35 @@ window.refreshOrders = async function() {
         // Get current parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         const currentDate = urlParams.get('date') || new Date().toISOString().split('T')[0];
+        const dateFrom = urlParams.get('date_from');
+        const dateTo = urlParams.get('date_to');
         const currentOrderStatus = urlParams.get('order_status') || 'all';
 
-        // Call refresh endpoint with current filters
-        const response = await fetch(`/api/refresh-orders?date=${currentDate}&order_status=${currentOrderStatus}`, {
+        // Build request body with date range parameters
+        const requestBody = {
+            order_status: currentOrderStatus
+        };
+
+        // Add date parameters based on what's available
+        if (dateFrom && dateTo) {
+            requestBody.date_from = dateFrom;
+            requestBody.date_to = dateTo;
+        } else if (dateFrom) {
+            requestBody.date = dateFrom;
+        } else {
+            requestBody.date = currentDate;
+        }
+
+        // Call refresh endpoint with current filters including date range
+        // Add cache-busting parameter to prevent cached responses
+        const response = await fetch(`/api/refresh-orders?_cb=${Date.now()}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+            },
+            body: JSON.stringify(requestBody)
         });
 
         const result = await response.json();
@@ -192,9 +213,24 @@ window.refreshOrders = async function() {
             const message = result.message || `✅ Refreshed! Found ${result.total_orders_count} orders`;
             showToast(message, 'success');
 
-            // Reload page to show updated orders
+            // Force cache-busting reload to show updated orders
             setTimeout(() => {
-                window.location.reload();
+                // Add multiple cache-busting parameters and force complete reload
+                const currentUrl = new URL(window.location);
+                currentUrl.searchParams.set('_refresh', Date.now());
+                currentUrl.searchParams.set('_cb', Math.random());
+
+                // Clear any potential cached redirects and force hard reload
+                if ('caches' in window) {
+                    caches.keys().then(function(names) {
+                        names.forEach(function(name) {
+                            caches.delete(name);
+                        });
+                    });
+                }
+
+                // Force complete page reload
+                window.location.replace(currentUrl.toString());
             }, 1500);
         } else {
             showToast(`❌ Error: ${result.message}`, 'error');
