@@ -1,13 +1,14 @@
 import unittest
 import json
-from app import app, locus_auth
+from app import create_app
 
 class LocusAssistantTestCase(unittest.TestCase):
     def setUp(self):
         """Set up test client"""
-        self.app = app.test_client()
-        self.app.testing = True
-        app.config['SECRET_KEY'] = 'test-secret-key'
+        self.flask_app = create_app('testing')
+        self.flask_app.config['SECRET_KEY'] = 'test-secret-key'
+        self.flask_app.config['TESTING'] = True
+        self.app = self.flask_app.test_client()
 
     def test_home_page(self):
         """Test that home page loads correctly"""
@@ -69,6 +70,7 @@ class LocusAssistantTestCase(unittest.TestCase):
 
     def test_locus_auth_class(self):
         """Test LocusAuth class methods"""
+        from app.utils import locus_auth
         auth = locus_auth
 
         # Test that methods exist
