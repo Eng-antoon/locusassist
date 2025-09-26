@@ -322,33 +322,59 @@ class EditingService:
             if 'lineItems' not in order_metadata:
                 order_metadata['lineItems'] = []
 
+            # Get existing line items to preserve data not being modified
+            existing_items = order_metadata.get('lineItems', [])
+            existing_items_dict = {item.get('id', ''): item for item in existing_items}
+
             # Replace all line items with the new ones
             new_line_items = []
 
+            logger.info(f"Received line items data: {line_items_data}")
+
             for item_data in line_items_data:
                 try:
-                    # Create new line item in the expected JSON format
-                    new_item = {
-                        'id': item_data.get('sku_id', ''),
-                        'name': item_data.get('name', ''),
-                        'description': item_data.get('description', ''),
-                        'quantity': int(item_data.get('quantity', 0)),
-                        'weightPerUnit': {
-                            'unit': 'KG',
+                    logger.info(f"Processing item: {item_data}")
+                    item_id = item_data.get('sku_id', '')
+
+                    # Start with existing item data if it exists
+                    existing_item = existing_items_dict.get(item_id, {})
+
+                    # Create new line item, preserving existing data where appropriate
+                    new_item = existing_item.copy() if existing_item else {}
+
+                    # Update with new data
+                    new_item.update({
+                        'id': item_id,
+                        'name': item_data.get('name', existing_item.get('name', '')),
+                        'description': item_data.get('description', existing_item.get('description', '')),
+                        'quantity': int(item_data.get('quantity', existing_item.get('quantity', 0))),
+                        'quantityUnit': item_data.get('quantity_unit', existing_item.get('quantityUnit', 'PIECES')),
+                        'handlingUnit': item_data.get('handling_unit', existing_item.get('handlingUnit', 'PIECES'))
+                    })
+
+                    # Update weight and volume, preserving structure
+                    if item_data.get('weight_per_unit') or not existing_item.get('weightPerUnit'):
+                        new_item['weightPerUnit'] = {
+                            'unit': existing_item.get('weightPerUnit', {}).get('unit', 'KG'),
                             'value': float(item_data.get('weight_per_unit', 0)) if item_data.get('weight_per_unit') else 0
-                        },
-                        'volumePerUnit': {
-                            'unit': 'CM',
+                        }
+
+                    if item_data.get('volume_per_unit') or not existing_item.get('volumePerUnit'):
+                        new_item['volumePerUnit'] = {
+                            'unit': existing_item.get('volumePerUnit', {}).get('unit', 'CM'),
                             'value': float(item_data.get('volume_per_unit', 0)) if item_data.get('volume_per_unit') else 0
-                        },
-                        'quantityUnit': item_data.get('quantity_unit', 'PIECES'),
-                        'handlingUnit': item_data.get('handling_unit', 'PIECES'),
-                        'transactionStatus': {
+                        }
+
+                    # Preserve or create transaction status
+                    if 'transactionStatus' not in new_item:
+                        new_item['transactionStatus'] = {
                             'orderedQuantity': int(item_data.get('quantity', 0)),
                             'transactedQuantity': 0,
                             'status': 'NOT_DELIVERED'
                         }
-                    }
+                    else:
+                        # Update ordered quantity to match the new quantity
+                        new_item['transactionStatus']['orderedQuantity'] = int(item_data.get('quantity', 0))
 
                     new_line_items.append(new_item)
                     results['added'] += 1
@@ -751,7 +777,7 @@ def register_editing_routes(app):
             order.raw_data = json.dumps(raw_data)
 
             # Mark the order as modified and track the fields
-            track_field_modification(order, 'transaction_details', modified_by)
+            self.track_field_modification(order, 'transaction_details', f"Updated {results['updated']} transactions", modified_by)
 
             # Save changes
             db.session.commit()

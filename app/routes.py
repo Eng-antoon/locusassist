@@ -797,8 +797,10 @@ def register_routes(app, config):
             # Add other database fields regardless of source
             order_detail_data['completed_on'] = db_order.completed_on.isoformat() if db_order.completed_on else None
             order_detail_data['rider_name'] = db_order.rider_name or order_detail_data.get('orderMetadata', {}).get('tourDetail', {}).get('riderName')
+            order_detail_data['rider_id'] = db_order.rider_id
             order_detail_data['rider_phone'] = db_order.rider_phone
             order_detail_data['vehicle_registration'] = db_order.vehicle_registration or order_detail_data.get('orderMetadata', {}).get('tourDetail', {}).get('vehicleRegistrationNumber')
+            order_detail_data['vehicle_id'] = db_order.vehicle_id
             order_detail_data['location_name'] = db_order.location_name or order_detail_data.get('location', {}).get('name')
             order_detail_data['location_city'] = db_order.location_city or order_detail_data.get('location', {}).get('address', {}).get('city')
             order_detail_data['location_address'] = db_order.location_address or order_detail_data.get('location', {}).get('address', {}).get('formattedAddress')

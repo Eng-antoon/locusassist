@@ -549,10 +549,10 @@
                                 </div>
                                 <div class="info-item mb-2 editable-field" data-field="rider_id">
                                     <label>Rider ID:</label>
-                                    <span class="display-value">{{ order.rider_id or tour.riderId or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.rider_id or 'N/A' }}</span>
                                     <input type="text" class="form-control edit-input d-none"
-                                           value="{{ order.rider_id or tour.riderId or '' }}"
-                                           data-original="{{ order.rider_id or tour.riderId or '' }}">
+                                           value="{{ order.rider_id or '' }}"
+                                           data-original="{{ order.rider_id or '' }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
@@ -569,10 +569,10 @@
                                 </div>
                                 <div class="info-item mb-2 editable-field" data-field="vehicle_id">
                                     <label>Vehicle ID:</label>
-                                    <span class="display-value">{{ order.vehicle_id or tour.vehicleId or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.vehicle_id or 'N/A' }}</span>
                                     <input type="text" class="form-control edit-input d-none"
-                                           value="{{ order.vehicle_id or tour.vehicleId or '' }}"
-                                           data-original="{{ order.vehicle_id or tour.vehicleId or '' }}">
+                                           value="{{ order.vehicle_id or '' }}"
+                                           data-original="{{ order.vehicle_id or '' }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
@@ -675,21 +675,21 @@
                                     <tr data-item-id="{{ item.id }}" data-original-data="{{ item|tojson|e }}">
                                         <td class="editable-cell" data-field="sku_id">
                                             <span class="display-value"><code>{{ item.id }}</code></span>
-                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.id }}">
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.id }}" data-original="{{ item.id }}">
                                         </td>
                                         <td class="editable-cell" data-field="name">
                                             <span class="display-value"><strong>{{ item.name }}</strong></span>
-                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.name }}">
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.name }}" data-original="{{ item.name }}">
                                         </td>
                                         <td class="editable-cell" data-field="description">
                                             <span class="display-value"><small class="text-muted">{{ item.description or 'N/A' }}</small></span>
-                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.description or '' }}">
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.description or '' }}" data-original="{{ item.description or '' }}">
                                         </td>
                                         <td class="editable-cell" data-field="quantity">
                                             <span class="display-value">
                                                 <span class="badge bg-primary">{{ item.quantity }} {{ item.quantityUnit }}</span>
                                             </span>
-                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.quantity }}">
+                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.quantity }}" data-original="{{ item.quantity }}">
                                         </td>
                                         <td class="editable-cell" data-field="weight">
                                             <span class="display-value">
@@ -700,7 +700,7 @@
                                                 {% endif %}
                                             </span>
                                             <input type="number" step="0.01" class="form-control form-control-sm edit-input d-none"
-                                                   value="{{ item.totalWeight.value if item.totalWeight else '' }}">
+                                                   value="{{ item.totalWeight.value if item.totalWeight else '' }}" data-original="{{ item.totalWeight.value if item.totalWeight else '' }}">
                                         </td>
                                         <td class="editable-cell" data-field="volume">
                                             <span class="display-value">
@@ -711,11 +711,11 @@
                                                 {% endif %}
                                             </span>
                                             <input type="number" step="0.01" class="form-control form-control-sm edit-input d-none"
-                                                   value="{{ item.totalVolume.value if item.totalVolume else '' }}">
+                                                   value="{{ item.totalVolume.value if item.totalVolume else '' }}" data-original="{{ item.totalVolume.value if item.totalVolume else '' }}">
                                         </td>
                                         <td class="editable-cell" data-field="unit">
                                             <span class="display-value">{{ item.quantityUnit }}</span>
-                                            <select class="form-control form-control-sm edit-input d-none">
+                                            <select class="form-control form-control-sm edit-input d-none" data-original="{{ item.quantityUnit }}">
                                                 <option value="PIECES" {{ 'selected' if item.quantityUnit == 'PIECES' else '' }}>PIECES</option>
                                                 <option value="BOXES" {{ 'selected' if item.quantityUnit == 'BOXES' else '' }}>BOXES</option>
                                                 <option value="KILOGRAMS" {{ 'selected' if item.quantityUnit == 'KILOGRAMS' else '' }}>KILOGRAMS</option>
@@ -724,7 +724,7 @@
                                         </td>
                                         <td class="editable-cell" data-field="handling_unit">
                                             <span class="display-value"><span class="badge bg-info">{{ item.handlingUnit }}</span></span>
-                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.handlingUnit }}">
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.handlingUnit }}" data-original="{{ item.handlingUnit }}">
                                         </td>
                                         <td class="order-items-actions d-none">
                                             <button class="btn btn-danger btn-sm" onclick="deleteOrderItem(this)">
@@ -1834,6 +1834,13 @@ function saveOrderItems() {
     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     saveBtn.disabled = true;
 
+    // Debug: log the data being sent
+    console.log('Sending line items data:', {
+        modified_by: 'User',
+        line_items: lineItems,
+        deleted_item_ids: deletedItemIds
+    });
+
     fetch(`/api/orders/${orderId}/line-items/edit`, {
         method: 'PUT',
         headers: {
@@ -1922,6 +1929,7 @@ function cancelTransactionEdit() {
 }
 
 function saveTransactionDetails() {
+    const orderId = '{{ order_id }}';
     if (!orderId) {
         showOrderAlert('danger', 'Order ID not found.');
         return;
