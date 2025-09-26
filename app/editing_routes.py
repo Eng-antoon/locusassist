@@ -428,16 +428,32 @@ class EditingService:
                             'value': float(item_data.get('volume_per_unit', 0)) if item_data.get('volume_per_unit') else 0
                         }
 
-                    # Preserve or create transaction status
+                    # Preserve or create transaction status, maintaining existing delivered quantities
                     if 'transactionStatus' not in new_item:
+                        # Check if there's an existing OrderLineItem with transaction data
+                        existing_line_item = OrderLineItem.query.filter_by(
+                            order_id=order_id,
+                            sku_id=item_id
+                        ).first()
+
+                        existing_transacted = existing_line_item.transacted_quantity if existing_line_item else 0
+
                         new_item['transactionStatus'] = {
                             'orderedQuantity': int(item_data.get('quantity', 0)),
-                            'transactedQuantity': 0,
-                            'status': 'NOT_DELIVERED'
+                            'transactedQuantity': existing_transacted or 0,
+                            'status': 'DELIVERED' if existing_transacted > 0 else 'NOT_DELIVERED'
                         }
                     else:
-                        # Update ordered quantity to match the new quantity
+                        # Update ordered quantity to match the new quantity, preserve transacted quantity
                         new_item['transactionStatus']['orderedQuantity'] = int(item_data.get('quantity', 0))
+                        # Ensure transactedQuantity is preserved from existing data
+                        if 'transactedQuantity' not in new_item['transactionStatus']:
+                            # Check database for existing transaction quantity
+                            existing_line_item = OrderLineItem.query.filter_by(
+                                order_id=order_id,
+                                sku_id=item_id
+                            ).first()
+                            new_item['transactionStatus']['transactedQuantity'] = existing_line_item.transacted_quantity if existing_line_item else 0
 
                     new_line_items.append(new_item)
                     results['added'] += 1
@@ -453,8 +469,33 @@ class EditingService:
             raw_data['orderMetadata'] = order_metadata
             order.raw_data = json.dumps(raw_data)
 
+            # Update OrderLineItem database records to match the JSON data
+            # First, remove all existing line items for this order
+            OrderLineItem.query.filter_by(order_id=order_id).delete()
+
+            # Create new OrderLineItem records from the updated line items
+            for item in new_line_items:
+                transaction_status = item.get('transactionStatus', {})
+                line_item = OrderLineItem(
+                    order_id=order_id,
+                    sku_id=item.get('id', ''),
+                    name=item.get('name', ''),
+                    quantity=item.get('quantity', 0),
+                    quantity_unit=item.get('quantityUnit', ''),
+                    transacted_quantity=transaction_status.get('transactedQuantity', 0),
+                    transaction_status=json.dumps(transaction_status) if transaction_status else ''
+                )
+                db.session.add(line_item)
+
             # Update order modification tracking
             self.track_field_modification(order, 'line_items', f"Updated {results['added']} line items", modified_by)
+
+            # Recalculate partial delivery status after line item updates
+            calculated_partial_status = self.calculate_partial_delivery(order)
+            if order.partially_delivered != calculated_partial_status:
+                order.partially_delivered = calculated_partial_status
+                self.track_field_modification(order, 'partially_delivered', calculated_partial_status, modified_by)
+                logger.info(f"Order {order_id} partially_delivered status updated to {calculated_partial_status} after line item changes")
 
             db.session.commit()
 
@@ -798,11 +839,42 @@ def register_editing_routes(app):
             raw_data = json.loads(order.raw_data) if order.raw_data else {}
             order_metadata = raw_data.get('orderMetadata', {})
 
+            # If no lineItems in metadata, create them from OrderLineItem database records
             if not order_metadata or not order_metadata.get('lineItems'):
-                return jsonify({'success': False, 'error': 'No line items found in order'}), 400
+                logger.info(f"No lineItems found in metadata for order {order_id}, creating from database records")
+
+                # Get OrderLineItem records from database
+                db_line_items = OrderLineItem.query.filter_by(order_id=order_id).all()
+                if not db_line_items:
+                    return jsonify({'success': False, 'error': 'No line items found in order. Please update order items first.'}), 400
+
+                # Initialize orderMetadata if needed
+                if not order_metadata:
+                    order_metadata = {}
+
+                # Create lineItems from database records
+                line_items = []
+                for db_item in db_line_items:
+                    item = {
+                        'id': db_item.sku_id,
+                        'skuId': db_item.sku_id,
+                        'name': db_item.name,
+                        'quantity': db_item.quantity,
+                        'quantityUnit': db_item.quantity_unit,
+                        'transactionStatus': {
+                            'orderedQuantity': db_item.quantity,
+                            'transactedQuantity': db_item.transacted_quantity or 0,
+                            'status': 'DELIVERED' if db_item.transacted_quantity and db_item.transacted_quantity > 0 else 'NOT_DELIVERED'
+                        }
+                    }
+                    line_items.append(item)
+
+                order_metadata['lineItems'] = line_items
+                logger.info(f"Created {len(line_items)} lineItems in metadata from database records")
+            else:
+                line_items = order_metadata.get('lineItems', [])
 
             updated_items = 0
-            line_items = order_metadata.get('lineItems', [])
 
             # Create a mapping from transaction ID to update data
             transaction_updates = {str(txn['id']): txn for txn in transactions}

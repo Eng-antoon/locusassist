@@ -437,10 +437,16 @@ Completely redesigned the heatmap visualization with comprehensive filtering cap
 - **One-Click Reset**: Clicking "Total Orders" resets all status filters to show complete dataset
 - **Helpful Hint Text**: Each card displays contextual hints like "Click to filter by completed" on hover
 
-#### **2. Partially Delivered Orders Support**
-- **New Status Category**: Added "Partially Delivered Orders" as a filterable status alongside existing options
-- **Database Integration**: Enhanced backend to properly identify and count partially delivered orders using `Order.partially_delivered` field
+#### **2. Intelligent Partial Delivery System**
+- **Local Calculation Engine**: Smart partial delivery calculation based on actual transaction quantities edited by users
+- **User-Centric Logic**: Partial delivery status determined by comparing `transacted_quantity` vs `ordered_quantity` for each line item
+- **Real-Time Recalculation**: Automatically recalculates partial delivery status when users edit transaction quantities
+- **Override Protection**: Local calculations take precedence over external API partial delivery flags for manually edited orders
+- **Smart Transaction Workflow**: Robust editing workflow that preserves delivered quantities when updating order items
+- **Automatic Status Updates**: Partial delivery status automatically appears in heatmaps, filters, and statistics
+- **Data Integrity**: Ensures delivered quantities are never lost during order item updates
 - **Visual Design**: Distinctive orange-themed card with truck-loading icon for easy identification
+- **Comprehensive Testing**: Full test suite validates calculation logic with multiple delivery scenarios
 
 #### **3. Advanced Rider & Vehicle Filtering**
 - **Searchable Dropdowns**: Dynamic dropdowns populate with actual riders and vehicles from the database
@@ -490,7 +496,56 @@ def _calculate_statistics(self, orders):
             unique_vehicles.add(order.vehicle_registration)
 ```
 
-**3. Filter Options API (`app/routes.py`)**
+**3. Local Partial Delivery Calculation Engine**
+```python
+def calculate_partial_delivery(self, order):
+    """Calculate if order is partially delivered based on transaction quantities"""
+    line_items = OrderLineItem.query.filter_by(order_id=order.id).all()
+
+    total_fully_delivered = 0
+    total_items = len(line_items)
+
+    for item in line_items:
+        ordered_qty = item.quantity or 0
+        transacted_qty = item.transacted_quantity or 0
+
+        # Consider item fully delivered if transacted >= ordered
+        if transacted_qty >= ordered_qty:
+            total_fully_delivered += 1
+
+    # Order is partially delivered if some but not all items are fully delivered
+    # OR if no items are fully delivered but some have partial quantities
+    if total_fully_delivered > 0 and total_fully_delivered < total_items:
+        return True
+    elif total_fully_delivered == 0:
+        # Check if any item has partial delivery (0 < transacted < ordered)
+        for item in line_items:
+            ordered_qty = item.quantity or 0
+            transacted_qty = item.transacted_quantity or 0
+            if transacted_qty > 0 and transacted_qty < ordered_qty:
+                return True
+
+    return False
+```
+
+**4. Transaction Update Integration**
+```python
+# Update OrderLineItem database records and recalculate partial delivery
+for item in line_items:
+    if item_id in transaction_updates:
+        line_item = OrderLineItem.query.filter_by(
+            order_id=order_id, sku_id=item.get('skuId', '')
+        ).first()
+
+        if line_item and 'transacted_quantity' in update_data:
+            line_item.transacted_quantity = update_data['transacted_quantity']
+
+# Recalculate partial delivery status
+calculated_partial_status = editing_service.calculate_partial_delivery(order)
+order.partially_delivered = calculated_partial_status
+```
+
+**5. Filter Options API (`app/routes.py`)**
 ```python
 @app.route('/api/heatmap/filter-options')
 def api_heatmap_filter_options():
@@ -3274,6 +3329,16 @@ cat archived_files/documentation_summaries/ENHANCED_FILTERING_IMPLEMENTATION.md
 - **Data Structure**: Properly updates transactionStatus within line items
 - **Persistence**: Changes saved to orderMetadata JSON and persist across page reloads
 
+##### 🧮 **Intelligent Partial Delivery System (NEW)**
+- **Local Calculation Engine**: Automatically calculates partial delivery status based on user-edited transaction quantities
+- **Real-Time Recalculation**: Updates `partially_delivered` flag immediately when transaction quantities are modified
+- **Smart Workflow**: Order items can be updated first, then transactions edited without losing delivered quantities
+- **Data Preservation**: Existing delivered quantities are preserved when updating order items
+- **Robust Error Handling**: Missing metadata is automatically created from database records
+- **Database Synchronization**: Both JSON metadata and OrderLineItem database records are updated simultaneously
+- **Override Protection**: Local calculations take precedence over external API partial delivery flags
+- **Heatmap Integration**: Partial delivery status automatically appears in heatmaps and statistics
+
 #### 🛠️ **Technical Improvements**
 
 ##### 📊 **Enhanced Logging & Debugging**
@@ -3378,6 +3443,15 @@ Line Items/Transactions Edit → Raw Data Update → Template Refresh → User C
 ##### **Tour-to-Order Propagation Testing**:
 1. Edit tour fields → Enable "Propagate to Orders" → Save changes
 2. **Expected**: All linked orders updated with tour data ✅
+
+##### **Partial Delivery Calculation Testing (NEW)**:
+1. Go to order detail page → Update line items → Click "Edit Transactions"
+2. Set some transacted quantities less than ordered quantities
+3. **Expected**: Order automatically marked as partially delivered, status appears in heatmap ✅
+
+##### **Smart Transaction Workflow Testing (NEW)**:
+1. Update order items first → Edit transactions second
+2. **Expected**: No "No line items found" error, delivered quantities preserved ✅
 
 ---
 
