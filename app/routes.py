@@ -160,6 +160,16 @@ def store_order_from_api_data(order_data, date_str):
             new_order.location_city = address.get('city', '')
             new_order.location_country_code = address.get('countryCode', '')
 
+            # Extract coordinates if available
+            latLng = location.get('latLng', {})
+            if latLng:
+                lat = latLng.get('lat') or latLng.get('latitude')
+                lng = latLng.get('lng') or latLng.get('longitude')
+                if lat is not None:
+                    new_order.location_latitude = float(lat)
+                if lng is not None:
+                    new_order.location_longitude = float(lng)
+
         # Cancellation information
         new_order.cancellation_reason = order_data.get('cancellation_reason')
 

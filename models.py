@@ -18,6 +18,10 @@ class Order(db.Model):
     location_city = db.Column(db.String(100))
     location_country_code = db.Column(db.String(10))
 
+    # Location coordinates - NEW FIELDS
+    location_latitude = db.Column(db.Float)  # Store latitude coordinates
+    location_longitude = db.Column(db.Float)  # Store longitude coordinates
+
     # Tour/Delivery data
     tour_id = db.Column(db.String(255), index=True)  # Full tour ID from API
     tour_date = db.Column(db.String(20))  # Parsed date from tour ID
@@ -91,6 +95,8 @@ class Order(db.Model):
             'location_address': self.location_address,
             'location_city': self.location_city,
             'location_country_code': self.location_country_code,
+            'location_latitude': self.location_latitude,
+            'location_longitude': self.location_longitude,
             'tour_id': self.tour_id,
             'tour_date': self.tour_date,
             'tour_plan_id': self.tour_plan_id,

@@ -818,6 +818,22 @@ class LocusAuth:
                 order.location_city = address.get('city')
                 order.location_country_code = address.get('countryCode')
 
+            # Extract coordinates if available
+            latLng = location.get('latLng', {})
+            if latLng and isinstance(latLng, dict):
+                lat = latLng.get('lat') or latLng.get('latitude')
+                lng = latLng.get('lng') or latLng.get('longitude')
+                if lat is not None:
+                    try:
+                        order.location_latitude = float(lat)
+                    except (ValueError, TypeError):
+                        pass
+                if lng is not None:
+                    try:
+                        order.location_longitude = float(lng)
+                    except (ValueError, TypeError):
+                        pass
+
         # Extract tour/delivery data (defensive programming)
         order_metadata = order_data.get('orderMetadata')
         if order_metadata and isinstance(order_metadata, dict):
@@ -956,6 +972,22 @@ class LocusAuth:
                 existing_order.location_address = address.get('formattedAddress', existing_order.location_address)
                 existing_order.location_city = address.get('city', existing_order.location_city)
                 existing_order.location_country_code = address.get('countryCode', existing_order.location_country_code)
+
+            # Update coordinates if available
+            latLng = location.get('latLng', {})
+            if latLng and isinstance(latLng, dict):
+                lat = latLng.get('lat') or latLng.get('latitude')
+                lng = latLng.get('lng') or latLng.get('longitude')
+                if lat is not None:
+                    try:
+                        existing_order.location_latitude = float(lat)
+                    except (ValueError, TypeError):
+                        pass
+                if lng is not None:
+                    try:
+                        existing_order.location_longitude = float(lng)
+                    except (ValueError, TypeError):
+                        pass
 
         # Update enhanced fields from order_data
         field_mappings = {
