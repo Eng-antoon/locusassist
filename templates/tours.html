@@ -63,7 +63,7 @@
             <div id="filters-content" style="display: none;" class="filters-body">
                 <div class="row g-4">
                     <!-- Search and Info -->
-                    <div class="col-lg-6">
+                    <div class="col-lg-4">
                         <div class="filter-section">
                             <h6 class="filter-section-title">
                                 <i class="fas fa-search me-2"></i>Search & Info
@@ -82,39 +82,136 @@
                                 <small class="text-muted">Date automatically follows your Orders page selection</small>
                             </div>
 
-                            <!-- Search -->
+                            <!-- General Search -->
                             <div class="mb-3">
-                                <label class="form-label">Search Tours</label>
+                                <label class="form-label">General Search</label>
                                 <input type="text" class="form-control" id="filter-search"
-                                       name="search" placeholder="Search Tour ID, Name, Rider...">
+                                       name="search" placeholder="Search all fields...">
+                                <small class="text-muted">Search across tour ID, name, rider, vehicle, cities, company</small>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Sorting Options -->
-                    <div class="col-lg-6">
+                    <!-- Advanced Filters -->
+                    <div class="col-lg-4">
                         <div class="filter-section">
                             <h6 class="filter-section-title">
-                                <i class="fas fa-sort me-2"></i>Sorting
+                                <i class="fas fa-filter me-2"></i>Advanced Filters
                             </h6>
 
-                            <!-- Sort By -->
+                            <!-- Vehicle Filter -->
                             <div class="mb-3">
-                                <label class="form-label">Sort By</label>
-                                <select class="form-select" id="filter-sort-by" name="sort_by">
-                                    <option value="tour_number">Tour Number</option>
-                                    <option value="tour_date">Tour Date</option>
-                                    <option value="total_orders">Total Orders</option>
+                                <label class="form-label">Vehicle</label>
+                                <select class="form-select searchable-select" id="filter-vehicle" name="vehicle">
+                                    <option value="">All Vehicles</option>
                                 </select>
                             </div>
 
-                            <!-- Sort Order -->
+                            <!-- Rider Filter -->
                             <div class="mb-3">
-                                <label class="form-label">Sort Order</label>
-                                <select class="form-select" id="filter-sort-order" name="sort_order">
-                                    <option value="asc">Ascending</option>
-                                    <option value="desc">Descending</option>
+                                <label class="form-label">Rider</label>
+                                <select class="form-select searchable-select" id="filter-rider" name="rider">
+                                    <option value="">All Riders</option>
                                 </select>
+                            </div>
+
+                            <!-- Tour Number Filter -->
+                            <div class="mb-3">
+                                <label class="form-label">Tour Number</label>
+                                <input type="text" class="form-control" id="filter-tour-number"
+                                       name="tour_number" placeholder="Tour number or name...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status & Location Filters -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-map-marker-alt me-2"></i>Status & Location
+                            </h6>
+
+                            <!-- Tour Status Filter -->
+                            <div class="mb-3">
+                                <label class="form-label">Tour Status</label>
+                                <select class="form-select" id="filter-tour-status" name="tour_status">
+                                    <option value="">All Statuses</option>
+                                    <option value="WAITING">Waiting</option>
+                                    <option value="ONGOING">Ongoing</option>
+                                    <option value="COMPLETED">Completed</option>
+                                    <option value="CANCELLED">Cancelled</option>
+                                </select>
+                            </div>
+
+                            <!-- Cities Filter -->
+                            <div class="mb-3">
+                                <label class="form-label">Cities</label>
+                                <select class="form-select searchable-select" id="filter-cities" name="cities">
+                                    <option value="">All Cities</option>
+                                </select>
+                            </div>
+
+                            <!-- Company Owner Filter -->
+                            <div class="mb-3">
+                                <label class="form-label">Company Owner</label>
+                                <select class="form-select searchable-select" id="filter-company-owner" name="company_owner">
+                                    <option value="">All Companies</option>
+                                </select>
+                                <small class="text-muted">Filter by company that owns orders in tours</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sorting Options Row -->
+                <div class="row g-4 mt-2">
+                    <div class="col-lg-6">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-sort me-2"></i>Sorting Options
+                            </h6>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <!-- Sort By -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Sort By</label>
+                                        <select class="form-select" id="filter-sort-by" name="sort_by">
+                                            <option value="tour_number">Tour Number</option>
+                                            <option value="tour_date">Tour Date</option>
+                                            <option value="total_orders">Total Orders</option>
+                                            <option value="tour_status">Tour Status</option>
+                                            <option value="rider_name">Rider Name</option>
+                                            <option value="vehicle_registration">Vehicle</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <!-- Sort Order -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Sort Order</label>
+                                        <select class="form-select" id="filter-sort-order" name="sort_order">
+                                            <option value="asc">Ascending</option>
+                                            <option value="desc">Descending</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Filters Display -->
+                    <div class="col-lg-6">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-tags me-2"></i>Active Filters</span>
+                                <button id="clear-status-filter" class="btn btn-sm btn-outline-danger"
+                                        onclick="clearStatusFilter()" style="display: none;">
+                                    <i class="fas fa-times me-1"></i>Clear Status Filter
+                                </button>
+                            </h6>
+                            <div id="active-filters-display" class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-light text-dark">No active filters</span>
                             </div>
                         </div>
                     </div>
@@ -184,6 +281,25 @@
 
 {% endblock %}
 
+{% block extra_css %}
+<style>
+/* Searchable Select Styles */
+.searchable-select {
+    position: relative;
+}
+
+/* Style to make it look like a normal select but allow typing */
+.searchable-select.typing {
+    background-image: none;
+    cursor: text;
+}
+
+.searchable-select.typing option {
+    display: none;
+}
+</style>
+{% endblock %}
+
 {% block scripts %}
 <script>
 // Tours dashboard state
@@ -191,9 +307,24 @@ let currentPage = 1;
 let currentFilters = {
     date: '{{ selected_date }}', // Initialize with server date, will be updated
     search: '',
+    vehicle: '',
+    rider: '',
+    tour_number: '',
+    cities: '',
+    tour_status: '',
+    company_owner: '',
+    order_status_filter: '', // For clickable status badges
     sort_by: 'tour_number',
     sort_order: 'asc',
     per_page: 50
+};
+
+// Filter options data
+let filterOptions = {
+    cities: [],
+    riders: [],
+    vehicles: [],
+    companies: []
 };
 
 // Function to get the current date from the orders page (localStorage or default)
@@ -212,7 +343,7 @@ function getOrdersPageDate() {
 }
 
 // Initialize tours dashboard
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Set the proper date first
     currentFilters.date = getOrdersPageDate();
     console.log('Initialized with date:', currentFilters.date);
@@ -222,6 +353,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update the displayed date from orders page
     updateDisplayedDate();
 
+    // Load filter options for searchable dropdowns
+    console.log('Loading filter options...');
+    await loadFilterOptions();
+
+    // Initialize searchable dropdowns
+    initSearchableDropdowns();
+
     // Automatically refresh tour data when page loads to ensure it's up to date
     console.log('Auto-refreshing tour data on page load...');
     autoRefreshTourData();
@@ -230,11 +368,13 @@ document.addEventListener('DOMContentLoaded', function() {
     updateLastUpdatedTime();
 
     // Listen for storage events to update when orders page changes date
-    window.addEventListener('storage', function(e) {
+    window.addEventListener('storage', async function(e) {
         if (e.key === 'selectedDate' && e.newValue !== e.oldValue) {
             console.log('Date changed in orders page from', e.oldValue, 'to', e.newValue);
             currentFilters.date = e.newValue;
             updateDisplayedDate();
+            // Reload filter options for new date
+            await loadFilterOptions();
             // Auto-refresh data when date changes
             autoRefreshTourData();
         }
@@ -355,6 +495,24 @@ function initializeFiltersPanel() {
         currentPage = 1;
         loadTours();
     });
+
+    // Enter key support for text input fields
+    const textInputFields = ['filter-search', 'filter-tour-number'];
+    textInputFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    applyFilters();
+                }
+            });
+        }
+    });
+
+    // Enter key support for searchable dropdowns (already implemented in makeSelectSearchable)
+    // The searchable dropdowns already handle Enter key to select filtered options
+    // and can trigger filter application through their change events
 }
 
 function updateDisplayedDate() {
@@ -368,11 +526,20 @@ function updateDisplayedDate() {
 function applyFilters() {
     // Get filter values (date comes from orders page, so don't read it from form)
     currentFilters.search = document.getElementById('filter-search').value.trim();
+    currentFilters.vehicle = document.getElementById('filter-vehicle').value.trim();
+    currentFilters.rider = document.getElementById('filter-rider').value.trim();
+    currentFilters.tour_number = document.getElementById('filter-tour-number').value.trim();
+    currentFilters.cities = document.getElementById('filter-cities').value.trim();
+    currentFilters.tour_status = document.getElementById('filter-tour-status').value.trim();
+    currentFilters.company_owner = document.getElementById('filter-company-owner').value.trim();
     currentFilters.sort_by = document.getElementById('filter-sort-by').value;
     currentFilters.sort_order = document.getElementById('filter-sort-order').value;
 
     // Reset to first page
     currentPage = 1;
+
+    // Update active filters display
+    updateActiveFiltersDisplay();
 
     // Load tours with new filters
     loadTours();
@@ -380,10 +547,19 @@ function applyFilters() {
 }
 
 function clearFilters() {
-    // Reset filter form (only search and sorting, date comes from orders page)
+    // Reset all filter forms (except date which comes from orders page)
     document.getElementById('filter-search').value = '';
+    document.getElementById('filter-vehicle').value = '';
+    document.getElementById('filter-rider').value = '';
+    document.getElementById('filter-tour-number').value = '';
+    document.getElementById('filter-cities').value = '';
+    document.getElementById('filter-tour-status').value = '';
+    document.getElementById('filter-company-owner').value = '';
     document.getElementById('filter-sort-by').value = 'tour_number';
     document.getElementById('filter-sort-order').value = 'asc';
+
+    // Clear order status filter (from clickable badges)
+    currentFilters.order_status_filter = '';
 
     // Apply cleared filters
     applyFilters();
@@ -407,6 +583,27 @@ async function loadTours() {
         }
         if (currentFilters.search) {
             params.append('search', currentFilters.search);
+        }
+        if (currentFilters.vehicle) {
+            params.append('vehicle', currentFilters.vehicle);
+        }
+        if (currentFilters.rider) {
+            params.append('rider', currentFilters.rider);
+        }
+        if (currentFilters.tour_number) {
+            params.append('tour_number', currentFilters.tour_number);
+        }
+        if (currentFilters.cities) {
+            params.append('cities', currentFilters.cities);
+        }
+        if (currentFilters.tour_status) {
+            params.append('tour_status', currentFilters.tour_status);
+        }
+        if (currentFilters.company_owner) {
+            params.append('company_owner', currentFilters.company_owner);
+        }
+        if (currentFilters.order_status_filter) {
+            params.append('order_status_filter', currentFilters.order_status_filter);
         }
 
         const apiUrl = `/api/tours?${params}`;
@@ -459,44 +656,54 @@ function displayTourStats(stats) {
     const statsGrid = document.getElementById('tour-stats-grid');
 
     statsGrid.innerHTML = `
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" onclick="showAllTours()"
+             title="Click to show all tours" style="cursor: pointer;">
             <div class="stat-icon">
                 <i class="fas fa-route"></i>
             </div>
             <div class="stat-value">${stats.total_tours || 0}</div>
             <div class="stat-label">Total Tours</div>
+            <small class="text-muted">Click to show all</small>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" onclick="showAllTours()"
+             title="Click to show all tours" style="cursor: pointer;">
             <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
                 <i class="fas fa-box"></i>
             </div>
             <div class="stat-value">${stats.total_orders || 0}</div>
             <div class="stat-label">Total Orders</div>
+            <small class="text-muted">Click to show all</small>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" onclick="filterByOrderStatus('COMPLETED')"
+             title="Click to filter tours with completed orders" style="cursor: pointer;">
             <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
                 <i class="fas fa-check-circle"></i>
             </div>
             <div class="stat-value">${stats.completed_orders || 0}</div>
             <div class="stat-label">Completed Orders</div>
+            <small class="text-muted">Click to filter</small>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" onclick="filterByOrderStatus('WAITING')"
+             title="Click to filter tours with pending orders" style="cursor: pointer;">
             <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
                 <i class="fas fa-clock"></i>
             </div>
             <div class="stat-value">${stats.pending_orders || 0}</div>
             <div class="stat-label">Pending Orders</div>
+            <small class="text-muted">Click to filter</small>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" onclick="filterByOrderStatus('CANCELLED')"
+             title="Click to filter tours with cancelled orders" style="cursor: pointer;">
             <div class="stat-icon" style="background: rgba(220, 53, 69, 0.1); color: var(--danger-color);">
                 <i class="fas fa-times-circle"></i>
             </div>
             <div class="stat-value">${stats.cancelled_orders || 0}</div>
             <div class="stat-label">Cancelled Orders</div>
+            <small class="text-muted">Click to filter</small>
         </div>
 
         <div class="stat-card hover-lift">
@@ -697,15 +904,40 @@ function createTourCard(tour, index) {
 function displayResultsSummary(result) {
     const summaryDiv = document.getElementById('results-summary');
 
+    // Build filter description
+    let filterDescription = '';
+    const filters = result.filters_applied || {};
+    const activeFilters = [];
+
+    if (filters.date) {
+        // Convert tour date back to user-visible date (tour date + 1)
+        const tourDate = new Date(filters.date + 'T00:00:00');
+        tourDate.setDate(tourDate.getDate() + 1);
+        const userDate = tourDate.toISOString().split('T')[0];
+        activeFilters.push(`date: ${userDate}`);
+    }
+    if (filters.search) activeFilters.push(`search: "${filters.search}"`);
+    if (filters.vehicle) activeFilters.push(`vehicle: "${filters.vehicle}"`);
+    if (filters.rider) activeFilters.push(`rider: "${filters.rider}"`);
+    if (filters.tour_number) activeFilters.push(`tour #: "${filters.tour_number}"`);
+    if (filters.cities) activeFilters.push(`cities: "${filters.cities}"`);
+    if (filters.tour_status) activeFilters.push(`status: ${filters.tour_status}`);
+    if (filters.company_owner) activeFilters.push(`company: "${filters.company_owner}"`);
+    if (filters.order_status_filter) activeFilters.push(`order status: ${filters.order_status_filter}`);
+
+    if (activeFilters.length > 0) {
+        filterDescription = ` with filters: ${activeFilters.join(', ')}`;
+    }
+
     summaryDiv.innerHTML = `
         <div class="alert alert-info">
             <i class="fas fa-info-circle me-2"></i>
-            Found <strong>${result.total_count}</strong> tours
-            ${currentFilters.date ? `for ${currentFilters.date}` : ''}
-            ${currentFilters.search ? ` matching "${currentFilters.search}"` : ''}
+            Found <strong>${result.total_count}</strong> tours${filterDescription}
             <div class="mt-2 small">
                 <strong>Page ${result.page} of ${result.total_pages}</strong>
                 (showing ${result.tours.length} tours)
+                ${result.total_count > result.tours.length ?
+                    `<span class="ms-2 text-muted">• Use pagination to see more results</span>` : ''}
             </div>
         </div>
     `;
@@ -840,6 +1072,367 @@ function showSuccess(message) {
 function updateLastUpdatedTime() {
     const now = new Date();
     document.getElementById('last-updated').textContent = now.toLocaleTimeString();
+}
+
+// Function to show all tours (for Total Orders/Total Tours clicks)
+function showAllTours() {
+    console.log('Showing all tours');
+
+    // Clear all existing filters
+    clearFilters();
+
+    // Show success message
+    showSuccess('Showing all tours');
+}
+
+// Function to filter by order status (for clickable statistics)
+function filterByOrderStatus(orderStatus) {
+    console.log(`Filtering by order status: ${orderStatus}`);
+
+    // Clear existing filters and set the order status filter
+    clearFilters();
+    currentFilters.order_status_filter = orderStatus;
+
+    // Update active filters display
+    updateActiveFiltersDisplay();
+
+    // Load tours with the new filter
+    loadTours();
+    loadTourSummary();
+
+    // Show filter panel if it's hidden
+    const filtersContent = document.getElementById('filters-content');
+    const filterActions = document.getElementById('filter-actions');
+    const chevron = document.getElementById('filters-chevron');
+    const toggleText = document.getElementById('filters-toggle-text');
+
+    if (filtersContent.style.display === 'none') {
+        filtersContent.style.display = 'block';
+        filterActions.style.display = 'block';
+        chevron.className = 'fas fa-chevron-up';
+        toggleText.textContent = 'Hide Filters';
+    }
+
+    // Show success message with smart sorting info
+    let message = `Filtered tours with ${orderStatus.toLowerCase()} orders`;
+    if (orderStatus === 'CANCELLED') {
+        message += ' (sorted by most cancellations first)';
+    } else if (orderStatus === 'WAITING') {
+        message += ' (sorted by least pending orders first)';
+    }
+    showSuccess(message);
+}
+
+// Function to clear status filter only
+function clearStatusFilter() {
+    console.log('Clearing status filter');
+
+    currentFilters.order_status_filter = '';
+    updateActiveFiltersDisplay();
+
+    // Load tours without status filter
+    loadTours();
+    loadTourSummary();
+
+    showSuccess('Status filter cleared');
+}
+
+// Function to update active filters display
+function updateActiveFiltersDisplay() {
+    const activeFiltersDiv = document.getElementById('active-filters-display');
+    const clearStatusButton = document.getElementById('clear-status-filter');
+    const activeFilters = [];
+
+    // Check each filter and add to active list
+    if (currentFilters.search) {
+        activeFilters.push(`Search: "${currentFilters.search}"`);
+    }
+    if (currentFilters.vehicle) {
+        activeFilters.push(`Vehicle: "${currentFilters.vehicle}"`);
+    }
+    if (currentFilters.rider) {
+        activeFilters.push(`Rider: "${currentFilters.rider}"`);
+    }
+    if (currentFilters.tour_number) {
+        activeFilters.push(`Tour #: "${currentFilters.tour_number}"`);
+    }
+    if (currentFilters.cities) {
+        activeFilters.push(`Cities: "${currentFilters.cities}"`);
+    }
+    if (currentFilters.tour_status) {
+        activeFilters.push(`Status: ${currentFilters.tour_status}`);
+    }
+    if (currentFilters.company_owner) {
+        activeFilters.push(`Company: "${currentFilters.company_owner}"`);
+    }
+    if (currentFilters.order_status_filter) {
+        let statusText = `Order Status: ${currentFilters.order_status_filter}`;
+        if (currentFilters.order_status_filter === 'CANCELLED') {
+            statusText += ' (smart sorted)';
+        } else if (currentFilters.order_status_filter === 'WAITING') {
+            statusText += ' (smart sorted)';
+        }
+        activeFilters.push(statusText);
+    }
+
+    // Show/hide clear status filter button
+    if (currentFilters.order_status_filter) {
+        clearStatusButton.style.display = 'inline-block';
+    } else {
+        clearStatusButton.style.display = 'none';
+    }
+
+    // Display active filters with X buttons
+    if (activeFilters.length === 0) {
+        activeFiltersDiv.innerHTML = '<span class="badge bg-light text-dark">No active filters</span>';
+    } else {
+        const badgesHTML = activeFilters.map(filter => {
+            const [type, value] = filter.split(': ');
+            // Map display names to filter types
+            let filterType = type.toLowerCase().replace(' ', '_');
+            if (type === 'Tour #') filterType = 'tour_number';
+            if (type === 'Company') filterType = 'company_owner';
+            if (type === 'Status') filterType = 'tour_status';
+            if (type === 'Order Status') filterType = 'order_status_filter';
+
+            return `<span class="badge bg-primary d-inline-flex align-items-center gap-1">
+                ${filter}
+                <i class="fas fa-times cursor-pointer"
+                   onclick="clearSpecificFilter('${filterType}')"
+                   title="Remove filter"
+                   style="margin-left: 5px; font-size: 10px; cursor: pointer;"></i>
+            </span>`;
+        }).join(' ');
+        activeFiltersDiv.innerHTML = badgesHTML;
+    }
+}
+
+// Function to clear a specific filter (for removing individual badges)
+function clearSpecificFilter(filterType) {
+    switch(filterType) {
+        case 'search':
+            currentFilters.search = '';
+            document.getElementById('filter-search').value = '';
+            break;
+        case 'vehicle':
+            currentFilters.vehicle = '';
+            document.getElementById('filter-vehicle').value = '';
+            break;
+        case 'rider':
+            currentFilters.rider = '';
+            document.getElementById('filter-rider').value = '';
+            break;
+        case 'tour_number':
+            currentFilters.tour_number = '';
+            document.getElementById('filter-tour-number').value = '';
+            break;
+        case 'cities':
+            currentFilters.cities = '';
+            document.getElementById('filter-cities').value = '';
+            break;
+        case 'tour_status':
+            currentFilters.tour_status = '';
+            document.getElementById('filter-tour-status').value = '';
+            break;
+        case 'company_owner':
+            currentFilters.company_owner = '';
+            document.getElementById('filter-company-owner').value = '';
+            break;
+        case 'order_status_filter':
+            currentFilters.order_status_filter = '';
+            break;
+    }
+
+    // Update displays and reload data
+    updateActiveFiltersDisplay();
+    loadTours();
+    loadTourSummary();
+}
+
+// Select-style searchable dropdown functionality
+function initSearchableDropdowns() {
+    const dropdowns = [
+        { selectId: 'filter-vehicle', dataKey: 'vehicles', placeholder: 'Select vehicle...' },
+        { selectId: 'filter-rider', dataKey: 'riders', placeholder: 'Select rider...' },
+        { selectId: 'filter-tour-number', dataKey: 'tour_numbers', placeholder: 'Select tour number...' },
+        { selectId: 'filter-cities', dataKey: 'cities', placeholder: 'Select cities...' },
+        { selectId: 'filter-company-owner', dataKey: 'companies', placeholder: 'Select company...' }
+    ];
+
+    // Setup each select-style searchable dropdown
+    dropdowns.forEach(dropdown => {
+        const select = document.getElementById(dropdown.selectId);
+
+        if (!select) {
+            console.warn(`Select element not found for ${dropdown.selectId}`);
+            return;
+        }
+
+        // Populate the select with options
+        populateSearchableSelect(dropdown);
+
+        // Make the select searchable by adding typing functionality
+        makeSelectSearchable(select, dropdown);
+    });
+}
+
+function populateSearchableSelect(dropdown, preserveValue = false) {
+    const select = document.getElementById(dropdown.selectId);
+    const data = filterOptions[dropdown.dataKey] || [];
+
+    // Preserve the current selected value if requested
+    const currentValue = preserveValue ? select.value : '';
+
+    // Clear existing options except the first empty one
+    select.innerHTML = `<option value="">${dropdown.placeholder}</option>`;
+
+    // Add options from data
+    data.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item;
+        option.textContent = item;
+        select.appendChild(option);
+    });
+
+    // Restore the selected value if it was preserved and still exists in the options
+    if (preserveValue && currentValue) {
+        const optionExists = Array.from(select.options).some(opt => opt.value === currentValue);
+        if (optionExists) {
+            select.value = currentValue;
+        }
+    }
+}
+
+function makeSelectSearchable(select, dropdown) {
+    const data = filterOptions[dropdown.dataKey] || [];
+    let isTyping = false;
+    let typingValue = '';
+
+    // Add event listeners for typing functionality
+    select.addEventListener('keydown', function(e) {
+        // Allow normal navigation keys
+        if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Tab'].includes(e.key)) {
+            if (isTyping && e.key === 'Enter') {
+                // If typing and Enter pressed, select first filtered option and apply filters
+                e.preventDefault();
+                const filteredOptions = Array.from(select.options).filter(opt =>
+                    opt.value && opt.value.toLowerCase().includes(typingValue.toLowerCase())
+                );
+                if (filteredOptions.length > 0) {
+                    select.value = filteredOptions[0].value;
+                    select.dispatchEvent(new Event('change'));
+                    // Apply filters after selecting the option
+                    setTimeout(() => applyFilters(), 10);
+                }
+                isTyping = false;
+                typingValue = '';
+                return;
+            }
+            if (!isTyping && e.key === 'Enter') {
+                // If not typing and Enter pressed, apply filters with current selection
+                e.preventDefault();
+                applyFilters();
+                return;
+            }
+            return;
+        }
+
+        // Handle backspace
+        if (e.key === 'Backspace') {
+            if (isTyping) {
+                e.preventDefault();
+                typingValue = typingValue.slice(0, -1);
+                filterSelectOptions(select, dropdown, typingValue);
+            }
+            return;
+        }
+
+        // Start or continue typing mode
+        if (e.key.length === 1) {
+            e.preventDefault();
+            isTyping = true;
+            typingValue += e.key;
+            filterSelectOptions(select, dropdown, typingValue);
+        }
+    });
+
+    // Reset typing when select changes or loses focus
+    select.addEventListener('change', function() {
+        isTyping = false;
+        typingValue = '';
+    });
+
+    select.addEventListener('blur', function() {
+        setTimeout(() => {
+            isTyping = false;
+            typingValue = '';
+            // Restore all options while preserving the selected value
+            populateSearchableSelect(dropdown, true);
+        }, 200);
+    });
+
+    select.addEventListener('focus', function() {
+        // Refresh options when focused to ensure they're up to date, preserving selected value
+        populateSearchableSelect(dropdown, true);
+    });
+}
+
+function filterSelectOptions(select, dropdown, searchTerm) {
+    const data = filterOptions[dropdown.dataKey] || [];
+
+    if (!searchTerm) {
+        populateSearchableSelect(dropdown, true);
+        return;
+    }
+
+    const filteredData = data.filter(item =>
+        item.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Update select options with filtered data
+    select.innerHTML = `<option value="">${dropdown.placeholder}</option>`;
+
+    if (filteredData.length === 0) {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = `No results for "${searchTerm}"`;
+        option.disabled = true;
+        select.appendChild(option);
+    } else {
+        filteredData.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item;
+            option.textContent = item;
+            select.appendChild(option);
+        });
+    }
+}
+
+// Load filter options from API
+async function loadFilterOptions() {
+    try {
+        const params = new URLSearchParams();
+        if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+
+        const response = await fetch(`/api/tours/filter-options?${params}`);
+        const result = await response.json();
+
+        if (result.success) {
+            filterOptions = {
+                cities: result.cities || [],
+                riders: result.riders || [],
+                vehicles: result.vehicles || [],
+                companies: result.companies || []
+            };
+            console.log('Filter options loaded:', filterOptions);
+        } else {
+            console.error('Failed to load filter options:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
 }
 
 // Auto-refresh every 5 minutes

@@ -187,46 +187,148 @@ class TourService:
 
     def get_tours(self, date: str = None, page: int = 1, per_page: int = 50,
                   search: str = None, sort_by: str = 'tour_number',
-                  sort_order: str = 'asc') -> dict:
-        """Get tours with filtering, searching, and pagination"""
+                  sort_order: str = 'asc', vehicle: str = None,
+                  rider: str = None, tour_number: str = None,
+                  cities: str = None, tour_status: str = None,
+                  company_owner: str = None, order_status_filter: str = None) -> dict:
+        """Get tours with advanced filtering, searching, and pagination"""
         try:
+            # Start with base query
             query = Tour.query
+
+            # For company owner filtering, we need to join with orders
+            needs_join = company_owner is not None
+
+            if needs_join:
+                query = query.join(Order, Tour.tour_id == Order.tour_id)
 
             # Date filtering
             if date:
                 query = query.filter(Tour.tour_date.like(f"{date}%"))
 
-            # Search filtering
-            if search:
-                search_term = f"%{search}%"
-                query = query.filter(
-                    db.or_(
-                        Tour.tour_id.ilike(search_term),
-                        Tour.tour_name.ilike(search_term),
-                        Tour.rider_name.ilike(search_term),
-                        Tour.vehicle_registration.ilike(search_term)
-                    )
-                )
+            # Vehicle filtering
+            if vehicle and vehicle.strip():
+                query = query.filter(Tour.vehicle_registration.ilike(f"%{vehicle.strip()}%"))
 
-            # Sorting
-            if sort_by == 'tour_number':
-                if sort_order == 'desc':
-                    query = query.order_by(desc(Tour.tour_number))
+            # Rider filtering
+            if rider and rider.strip():
+                query = query.filter(Tour.rider_name.ilike(f"%{rider.strip()}%"))
+
+            # Tour number filtering
+            if tour_number and tour_number.strip():
+                try:
+                    # Try exact number match first
+                    tour_num = int(tour_number.strip())
+                    query = query.filter(Tour.tour_number == tour_num)
+                except ValueError:
+                    # If not a number, search in tour_name
+                    query = query.filter(Tour.tour_name.ilike(f"%{tour_number.strip()}%"))
+
+            # Cities filtering
+            if cities and cities.strip():
+                cities_term = f"%{cities.strip()}%"
+                query = query.filter(Tour.delivery_cities.ilike(cities_term))
+
+            # Tour status filtering
+            if tour_status and tour_status.strip() and tour_status.upper() != 'ALL':
+                query = query.filter(Tour.tour_status == tour_status.upper())
+
+            # Company owner filtering (requires join with orders and custom_fields search)
+            if company_owner and company_owner.strip():
+                company_term = company_owner.strip()
+
+                # Get all orders first, then filter in Python (for complex JSON matching)
+                # This is less efficient but more reliable for JSON search
+                if not needs_join:
+                    query = query.join(Order, Tour.tour_id == Order.tour_id)
+                    needs_join = True
+
+                # Use subquery to find tour IDs with matching company owners
+                from sqlalchemy import exists
+                matching_orders_subquery = db.session.query(Order.tour_id).filter(
+                    Order.custom_fields.ilike(f'%{company_term}%')
+                ).distinct().subquery()
+
+                query = query.filter(Tour.tour_id.in_(
+                    db.session.query(matching_orders_subquery.c.tour_id)
+                ))
+                query = query.distinct()
+
+            # General search filtering (enhanced)
+            if search and search.strip():
+                search_term = f"%{search.strip()}%"
+                search_conditions = [
+                    Tour.tour_id.ilike(search_term),
+                    Tour.tour_name.ilike(search_term),
+                    Tour.rider_name.ilike(search_term),
+                    Tour.vehicle_registration.ilike(search_term),
+                    Tour.delivery_cities.ilike(search_term),
+                    Tour.tour_status.ilike(search_term)
+                ]
+
+                # If we haven't joined orders yet, join for custom_fields search
+                if not needs_join:
+                    query = query.join(Order, Tour.tour_id == Order.tour_id, isouter=True)
+                    query = query.distinct()
+
+                # Add search in Company_Owner from custom_fields (simple text search)
+                search_conditions.append(
+                    Order.custom_fields.ilike(search_term)
+                )
+                query = query.filter(db.or_(*search_conditions))
+
+            # Order status filtering for clickable badges
+            if order_status_filter and order_status_filter.upper() in ['COMPLETED', 'CANCELLED', 'WAITING']:
+                if order_status_filter.upper() == 'COMPLETED':
+                    query = query.filter(Tour.completed_orders > 0)
+                elif order_status_filter.upper() == 'CANCELLED':
+                    query = query.filter(Tour.cancelled_orders > 0)
+                    # Smart sorting: tours with most cancelled orders first
+                    if sort_by == 'tour_number':  # Only apply smart sorting if using default sort
+                        query = query.order_by(desc(Tour.cancelled_orders), asc(Tour.tour_number))
+                        sort_by = 'smart_cancelled'  # Mark as special sorting
+                elif order_status_filter.upper() == 'WAITING':
+                    query = query.filter(Tour.pending_orders > 0)
+                    # Smart sorting: tours with least pending orders first (most urgent)
+                    if sort_by == 'tour_number':  # Only apply smart sorting if using default sort
+                        query = query.order_by(asc(Tour.pending_orders), asc(Tour.tour_number))
+                        sort_by = 'smart_pending'  # Mark as special sorting
+
+            # Sorting (skip if smart sorting was already applied)
+            if sort_by not in ['smart_cancelled', 'smart_pending']:
+                if sort_by == 'tour_number':
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(Tour.tour_number))
+                    else:
+                        query = query.order_by(asc(Tour.tour_number))
+                elif sort_by == 'tour_date':
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(Tour.tour_date))
+                    else:
+                        query = query.order_by(asc(Tour.tour_date))
+                elif sort_by == 'total_orders':
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(Tour.total_orders))
+                    else:
+                        query = query.order_by(asc(Tour.total_orders))
+                elif sort_by == 'tour_status':
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(Tour.tour_status))
+                    else:
+                        query = query.order_by(asc(Tour.tour_status))
+                elif sort_by == 'rider_name':
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(Tour.rider_name))
+                    else:
+                        query = query.order_by(asc(Tour.rider_name))
+                elif sort_by == 'vehicle_registration':
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(Tour.vehicle_registration))
+                    else:
+                        query = query.order_by(asc(Tour.vehicle_registration))
                 else:
+                    # Default to tour number ascending
                     query = query.order_by(asc(Tour.tour_number))
-            elif sort_by == 'tour_date':
-                if sort_order == 'desc':
-                    query = query.order_by(desc(Tour.tour_date))
-                else:
-                    query = query.order_by(asc(Tour.tour_date))
-            elif sort_by == 'total_orders':
-                if sort_order == 'desc':
-                    query = query.order_by(desc(Tour.total_orders))
-                else:
-                    query = query.order_by(asc(Tour.total_orders))
-            else:
-                # Default to tour number ascending
-                query = query.order_by(asc(Tour.tour_number))
 
             # Get total count for pagination
             total_count = query.count()
@@ -245,7 +347,18 @@ class TourService:
                 'per_page': per_page,
                 'total_pages': total_pages,
                 'has_next': page < total_pages,
-                'has_prev': page > 1
+                'has_prev': page > 1,
+                'filters_applied': {
+                    'date': date,
+                    'search': search,
+                    'vehicle': vehicle,
+                    'rider': rider,
+                    'tour_number': tour_number,
+                    'cities': cities,
+                    'tour_status': tour_status,
+                    'company_owner': company_owner,
+                    'order_status_filter': order_status_filter
+                }
             }
 
         except Exception as e:
@@ -255,6 +368,82 @@ class TourService:
                 'error': str(e),
                 'tours': [],
                 'total_count': 0
+            }
+
+    def get_filter_options(self, date: str = None) -> dict:
+        """Get available filter options for dropdowns"""
+        try:
+            # Get unique cities from tours delivery_cities (JSON field)
+            cities_query = Tour.query
+            if date:
+                cities_query = cities_query.filter(Tour.tour_date.like(f"{date}%"))
+
+            tours_with_cities = cities_query.filter(Tour.delivery_cities.isnot(None)).all()
+            cities_set = set()
+            for tour in tours_with_cities:
+                try:
+                    cities_data = json.loads(tour.delivery_cities) if isinstance(tour.delivery_cities, str) else tour.delivery_cities
+                    if isinstance(cities_data, list):
+                        cities_set.update(cities_data)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+            # Get unique riders from tours
+            riders_query = Tour.query.filter(Tour.rider_name.isnot(None))
+            if date:
+                riders_query = riders_query.filter(Tour.tour_date.like(f"{date}%"))
+            riders = [r[0] for r in riders_query.with_entities(Tour.rider_name).distinct().all() if r[0]]
+
+            # Get unique vehicles from tours
+            vehicles_query = Tour.query.filter(Tour.vehicle_registration.isnot(None))
+            if date:
+                vehicles_query = vehicles_query.filter(Tour.tour_date.like(f"{date}%"))
+            vehicles = [v[0] for v in vehicles_query.with_entities(Tour.vehicle_registration).distinct().all() if v[0]]
+
+            # Get unique company owners from orders custom_fields
+            companies_query = Order.query.filter(Order.custom_fields.isnot(None))
+            if date:
+                # Convert orders date to tour date for filtering
+                from datetime import datetime, timedelta
+                try:
+                    orders_date = datetime.strptime(date, "%Y-%m-%d")
+                    tour_date = orders_date - timedelta(days=1)
+                    tour_date_str = tour_date.strftime("%Y-%m-%d")
+                    companies_query = companies_query.filter(Order.tour_date.like(f"{tour_date_str}%"))
+                except ValueError:
+                    pass
+
+            orders_with_custom_fields = companies_query.all()
+            companies_set = set()
+            for order in orders_with_custom_fields:
+                try:
+                    custom_fields = json.loads(order.custom_fields) if isinstance(order.custom_fields, str) else order.custom_fields
+                    if isinstance(custom_fields, dict) and 'Company_Owner' in custom_fields:
+                        company_owner = custom_fields['Company_Owner']
+                        if company_owner and company_owner.strip():
+                            companies_set.add(company_owner.strip())
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+            companies = sorted(list(companies_set))
+
+            return {
+                'success': True,
+                'cities': sorted(list(cities_set)),
+                'riders': sorted(riders),
+                'vehicles': sorted(vehicles),
+                'companies': sorted(companies)
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting filter options: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'cities': [],
+                'riders': [],
+                'vehicles': [],
+                'companies': []
             }
 
     def get_tour_details(self, tour_id: str) -> dict:

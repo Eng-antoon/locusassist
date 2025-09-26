@@ -1560,7 +1560,7 @@ def register_routes(app, config):
 
     @app.route('/api/tours')
     def api_tours():
-        """API endpoint to get tours with filtering and pagination"""
+        """API endpoint to get tours with advanced filtering and pagination"""
         from app.tours import tour_service
         from datetime import datetime, timedelta
 
@@ -1578,22 +1578,60 @@ def register_routes(app, config):
                 # If date format is invalid, keep original
                 pass
 
+        # Basic parameters
         page = int(request.args.get('page', 1))
         per_page = min(int(request.args.get('per_page', 50)), 100)  # Max 100
         search = request.args.get('search', '').strip()
         sort_by = request.args.get('sort_by', 'tour_number')
         sort_order = request.args.get('sort_order', 'asc')
 
-        # Get tours
+        # Advanced filtering parameters
+        vehicle = request.args.get('vehicle', '').strip()
+        rider = request.args.get('rider', '').strip()
+        tour_number = request.args.get('tour_number', '').strip()
+        cities = request.args.get('cities', '').strip()
+        tour_status = request.args.get('tour_status', '').strip()
+        company_owner = request.args.get('company_owner', '').strip()
+        order_status_filter = request.args.get('order_status_filter', '').strip()
+
+        # Get tours with advanced filtering
         result = tour_service.get_tours(
             date=date,
             page=page,
             per_page=per_page,
             search=search,
             sort_by=sort_by,
-            sort_order=sort_order
+            sort_order=sort_order,
+            vehicle=vehicle if vehicle else None,
+            rider=rider if rider else None,
+            tour_number=tour_number if tour_number else None,
+            cities=cities if cities else None,
+            tour_status=tour_status if tour_status else None,
+            company_owner=company_owner if company_owner else None,
+            order_status_filter=order_status_filter if order_status_filter else None
         )
 
+        return jsonify(result)
+
+    @app.route('/api/tours/filter-options')
+    def api_tours_filter_options():
+        """API endpoint to get available filter options for dropdowns"""
+        from app.tours import tour_service
+        from datetime import datetime, timedelta
+
+        date = request.args.get('date')
+
+        # Convert orders date to tour date if provided
+        if date:
+            try:
+                orders_date = datetime.strptime(date, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                date = tour_date.strftime("%Y-%m-%d")
+            except ValueError:
+                # If date format is invalid, keep original
+                pass
+
+        result = tour_service.get_filter_options(date=date)
         return jsonify(result)
 
     @app.route('/api/tours/summary')
