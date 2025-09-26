@@ -268,7 +268,7 @@
 .gm-popup-content {
     margin: 8px;
     line-height: 1.6;
-    max-width: 300px;
+    max-width: 350px;
 }
 
 .popup-header {
@@ -281,8 +281,8 @@
 
 .popup-stats {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
     margin: 8px 0;
 }
 
@@ -1045,6 +1045,9 @@ function addMarkers() {
 
 function createPopupContent(point) {
     const locationName = point.location_name || point.area_name || point.city_name || 'Unknown Location';
+    const totalValue = point.orders ? point.orders.reduce((sum, order) => sum + (order.order_value || 0), 0) : 0;
+    const uniqueRiders = point.orders ? new Set(point.orders.map(o => o.rider_name).filter(Boolean)).size : 0;
+    const uniqueVehicles = point.orders ? new Set(point.orders.map(o => o.vehicle_registration).filter(Boolean)).size : 0;
 
     return `
         <div class="popup-header">
@@ -1069,7 +1072,23 @@ function createPopupContent(point) {
                 <span class="popup-stat-value">${point.delivered_quantity}</span>
                 <span class="popup-stat-label">Delivered</span>
             </div>
+            <div class="popup-stat">
+                <span class="popup-stat-value">${uniqueRiders}</span>
+                <span class="popup-stat-label">Riders</span>
+            </div>
+            <div class="popup-stat">
+                <span class="popup-stat-value">${uniqueVehicles}</span>
+                <span class="popup-stat-label">Vehicles</span>
+            </div>
         </div>
+
+        ${totalValue > 0 ? `
+        <div class="text-center mt-2 mb-2">
+            <small class="text-muted">
+                <strong>Total Value:</strong> $${totalValue.toFixed(2)}
+            </small>
+        </div>
+        ` : ''}
 
         <div class="text-center mt-2">
             <small class="text-muted">Click marker for detailed information</small>
@@ -1170,8 +1189,11 @@ function createLocationDetailsContent(data) {
                                     <th>Order ID</th>
                                     <th>Status</th>
                                     <th>Location</th>
-                                    <th>Items</th>
                                     <th>Rider</th>
+                                    <th>Vehicle</th>
+                                    <th>Items</th>
+                                    <th>Value</th>
+                                    <th>Date</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1181,9 +1203,11 @@ function createLocationDetailsContent(data) {
             const statusClass = order.status === 'COMPLETED' ? 'success' :
                               order.status === 'CANCELLED' ? 'danger' : 'warning';
 
-            const itemsCount = order.line_items ? order.line_items.length : 0;
+            const itemsCount = order.line_items ? order.line_items.length : (order.total_items || 0);
             const totalQuantity = order.line_items ?
                 order.line_items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
+            const orderValue = order.order_value || 0;
+            const orderDate = order.date ? new Date(order.date).toLocaleDateString() : 'N/A';
 
             content += `
                 <tr>
@@ -1194,13 +1218,22 @@ function createLocationDetailsContent(data) {
                         <span class="badge bg-${statusClass}">${order.status}</span>
                     </td>
                     <td>
-                        <small>${order.location_name || 'N/A'}</small>
-                    </td>
-                    <td>
-                        <small>${itemsCount} items (${totalQuantity} qty)</small>
+                        <small>${order.location_name || order.location_city || 'N/A'}</small>
                     </td>
                     <td>
                         <small>${order.rider_name || 'N/A'}</small>
+                    </td>
+                    <td>
+                        <small>${order.vehicle_registration || 'N/A'}</small>
+                    </td>
+                    <td>
+                        <small>${itemsCount} items${totalQuantity > 0 ? ` (${totalQuantity} qty)` : ''}</small>
+                    </td>
+                    <td>
+                        <small>${orderValue > 0 ? '$' + orderValue.toFixed(2) : 'N/A'}</small>
+                    </td>
+                    <td>
+                        <small>${orderDate}</small>
                     </td>
                 </tr>
             `;
@@ -1315,7 +1348,7 @@ async function refreshHeatmap() {
 }
 
 function showLoading() {
-    console.log('⏳ Showing loading overlay...');
+    console.log('⏳ Loading heatmap data...');
     const loadingOverlay = document.getElementById('loading-overlay');
     if (loadingOverlay) {
         loadingOverlay.style.display = 'flex';
@@ -1328,12 +1361,12 @@ function showLoading() {
         }, 10);
         console.log('✅ Loading overlay shown successfully');
     } else {
-        console.warn('⚠️ Loading overlay element not found');
+        console.log('ℹ️ Loading overlay not present - using console logging only');
     }
 }
 
 function hideLoading() {
-    console.log('⏳ Hiding loading overlay...');
+    console.log('✅ Heatmap data loading completed');
     const loadingOverlay = document.getElementById('loading-overlay');
     if (loadingOverlay) {
         // Add fade-out animation
@@ -1348,7 +1381,7 @@ function hideLoading() {
             window.clearForceHideTimeout();
         }
     } else {
-        console.warn('⚠️ Loading overlay element not found');
+        console.log('ℹ️ Loading completed - no overlay to hide');
     }
 }
 

@@ -142,7 +142,14 @@ class HeatmapService:
                 'status': order.order_status,
                 'location_name': order.location_name,
                 'location_address': order.location_address,
-                'completed_on': order.completed_on.isoformat() if order.completed_on else None
+                'location_city': order.location_city,
+                'rider_name': order.rider_name,
+                'vehicle_registration': order.vehicle_registration,
+                'date': order.date.isoformat() if order.date else None,
+                'completed_on': order.completed_on.isoformat() if order.completed_on else None,
+                'customer_name': getattr(order, 'customer_name', None),
+                'total_items': len(order.line_items) if order.line_items else 0,
+                'order_value': sum(getattr(item, 'amount', 0) or 0 for item in order.line_items) if order.line_items else 0
             })
             data['order_count'] += 1
 
@@ -206,8 +213,16 @@ class HeatmapService:
             data['orders'].append({
                 'id': order.id,
                 'status': order.order_status,
+                'location_name': order.location_name,
                 'location_address': order.location_address,
-                'completed_on': order.completed_on.isoformat() if order.completed_on else None
+                'location_city': order.location_city,
+                'rider_name': order.rider_name,
+                'vehicle_registration': order.vehicle_registration,
+                'date': order.date.isoformat() if order.date else None,
+                'completed_on': order.completed_on.isoformat() if order.completed_on else None,
+                'customer_name': getattr(order, 'customer_name', None),
+                'total_items': len(order.line_items) if order.line_items else 0,
+                'order_value': sum(getattr(item, 'amount', 0) or 0 for item in order.line_items) if order.line_items else 0
             })
             data['coordinates'].append({
                 'lat': order.location_latitude,
@@ -284,7 +299,14 @@ class HeatmapService:
                 'status': order.order_status,
                 'location_name': order.location_name,
                 'location_address': order.location_address,
-                'completed_on': order.completed_on.isoformat() if order.completed_on else None
+                'location_city': order.location_city,
+                'rider_name': order.rider_name,
+                'vehicle_registration': order.vehicle_registration,
+                'date': order.date.isoformat() if order.date else None,
+                'completed_on': order.completed_on.isoformat() if order.completed_on else None,
+                'customer_name': getattr(order, 'customer_name', None),
+                'total_items': len(order.line_items) if order.line_items else 0,
+                'order_value': sum(getattr(item, 'amount', 0) or 0 for item in order.line_items) if order.line_items else 0
             })
             data['coordinates'].append({
                 'lat': order.location_latitude,
