@@ -42,7 +42,7 @@ def test_transaction_editing():
 
     try:
         # Make the API request
-        url = f"http://localhost:5000/api/orders/{order_id}/transactions/edit"
+        url = f"http://localhost:8081/api/orders/{order_id}/transactions/edit"
 
         response = requests.put(
             url,
@@ -53,25 +53,17 @@ def test_transaction_editing():
         print(f"\nResponse Status: {response.status_code}")
         print(f"Response Content: {response.text}")
 
-        if response.status_code == 200:
-            result = response.json()
-            if result.get('success'):
-                print("✅ Transaction editing test PASSED!")
-                print(f"Message: {result.get('message')}")
-                print(f"Updated items: {result.get('updated_items')}")
-                return True
-            else:
-                print("❌ Transaction editing test FAILED!")
-                print(f"Error: {result.get('error')}")
-                return False
-        else:
-            print("❌ Transaction editing test FAILED!")
-            print(f"HTTP {response.status_code}: {response.text}")
-            return False
+        assert response.status_code == 200, f"HTTP {response.status_code}: {response.text}"
+
+        result = response.json()
+        assert result.get('success'), f"Transaction editing failed: {result.get('error')}"
+
+        print("✅ Transaction editing test PASSED!")
+        print(f"Message: {result.get('message')}")
+        print(f"Updated items: {result.get('updated_items')}")
 
     except Exception as e:
-        print(f"❌ Transaction editing test FAILED with exception: {e}")
-        return False
+        assert False, f"Transaction editing test failed with exception: {e}"
 
 if __name__ == '__main__':
     print("=== Transaction Editing Test ===")

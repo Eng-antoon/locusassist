@@ -7,7 +7,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-BASE_URL = "http://localhost:8083"
+BASE_URL = "http://localhost:8081"
 TEST_USER = "PropagationTest"
 
 def test_tour_field_propagation():

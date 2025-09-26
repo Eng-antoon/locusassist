@@ -9,7 +9,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-BASE_URL = "http://localhost:8083"
+BASE_URL = "http://localhost:8081"
 TEST_USER = "CompleteTest"
 
 def test_data_protection_workflow():
@@ -102,10 +102,10 @@ def test_tour_editing():
                 result = response.json()
                 print(f"   ✅ Tour edited successfully!")
                 print(f"   📊 Propagated to {result.get('propagated_orders', 0)} orders")
-                return True
+                assert True
             else:
                 print(f"   ❌ Tour edit failed: {response.status_code}")
-                return False
+                assert False, "Test failed"
         else:
             print("   ❌ No tours found")
             return False

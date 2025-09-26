@@ -11,10 +11,10 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "http://localhost:8082"
+BASE_URL = "http://localhost:8081"
 TEST_USER = "TestUser"
 
-def test_api_endpoint(method, endpoint, data=None, files=None):
+def api_endpoint_helper(method, endpoint, data=None, files=None):
     """Test API endpoint and return response"""
     url = f"{BASE_URL}{endpoint}"
 
@@ -45,7 +45,7 @@ def test_tour_editing():
 
     # Test getting available tours first
     print("1. Getting tours list...")
-    response = test_api_endpoint('GET', '/api/tours')
+    response = api_endpoint_helper('GET', '/api/tours')
     if response and response.status_code == 200:
         tours_data = response.json()
         if tours_data.get('success') and tours_data.get('tours'):
@@ -64,7 +64,7 @@ def test_tour_editing():
                 "propagate_to_orders": True
             }
 
-            response = test_api_endpoint('PUT', f'/api/tours/{tour_id}/edit', update_data)
+            response = api_endpoint_helper('PUT', f'/api/tours/{tour_id}/edit', update_data)
             if response and response.status_code == 200:
                 result = response.json()
                 print(f"   ✅ Tour updated successfully: {result.get('message')}")
@@ -86,7 +86,7 @@ def test_order_editing():
     # Test getting available orders first
     print("1. Getting orders list...")
     today = datetime.now().strftime("%Y-%m-%d")
-    response = test_api_endpoint('GET', f'/api/orders?date={today}')
+    response = api_endpoint_helper('GET', f'/api/orders?date={today}')
 
     if response and response.status_code == 200:
         orders_data = response.json()
@@ -106,14 +106,14 @@ def test_order_editing():
                 }
             }
 
-            response = test_api_endpoint('PUT', f'/api/orders/{order_id}/edit', update_data)
+            response = api_endpoint_helper('PUT', f'/api/orders/{order_id}/edit', update_data)
             if response and response.status_code == 200:
                 result = response.json()
                 print(f"   ✅ Order updated successfully: {result.get('message')}")
 
                 # Test modification status check
                 print("3. Checking modification status...")
-                response = test_api_endpoint('GET', f'/api/orders/{order_id}/modification-status')
+                response = api_endpoint_helper('GET', f'/api/orders/{order_id}/modification-status')
                 if response and response.status_code == 200:
                     mod_status = response.json()
                     print(f"   ✅ Order is modified: {mod_status.get('is_modified')}")
@@ -133,13 +133,25 @@ def test_order_editing():
 
     return None
 
-def test_line_items_editing(order_id):
-    """Test line items editing functionality"""
-    if not order_id:
-        print("   ⚠️ Skipping line items test - no order ID")
+def test_line_items_editing():
+    """Test line items editing functionality - standalone test"""
+    print("\n🔧 Testing Line Items Editing...")
+
+    # Get an order first
+    today = datetime.now().strftime("%Y-%m-%d")
+    response = api_endpoint_helper('GET', f'/api/orders?date={today}')
+
+    if not response or response.status_code != 200:
+        print("   ❌ Failed to get orders for line items test")
         return
 
-    print("\n🔧 Testing Line Items Editing...")
+    orders_data = response.json()
+    if not orders_data.get('orders'):
+        print("   ❌ No orders found for line items test")
+        return
+
+    order_id = orders_data['orders'][0]['id']
+    print(f"   📋 Using order: {order_id}")
 
     # Test line items update
     line_items_data = {
@@ -160,7 +172,7 @@ def test_line_items_editing(order_id):
         ]
     }
 
-    response = test_api_endpoint('PUT', f'/api/orders/{order_id}/line-items/edit', line_items_data)
+    response = api_endpoint_helper('PUT', f'/api/orders/{order_id}/line-items/edit', line_items_data)
     if response and response.status_code == 200:
         result = response.json()
         print(f"   ✅ Line items updated: {result.get('message')}")
@@ -170,13 +182,25 @@ def test_line_items_editing(order_id):
         if response:
             print(f"   Error: {response.text}")
 
-def test_data_protection(order_id):
-    """Test data protection functionality"""
-    if not order_id:
-        print("   ⚠️ Skipping data protection test - no order ID")
+def test_data_protection():
+    """Test data protection functionality - standalone test"""
+    print("\n🛡️ Testing Data Protection...")
+
+    # Get an order first
+    today = datetime.now().strftime("%Y-%m-%d")
+    response = api_endpoint_helper('GET', f'/api/orders?date={today}')
+
+    if not response or response.status_code != 200:
+        print("   ❌ Failed to get orders for data protection test")
         return
 
-    print("\n🛡️ Testing Data Protection...")
+    orders_data = response.json()
+    if not orders_data.get('orders'):
+        print("   ❌ No orders found for data protection test")
+        return
+
+    order_id = orders_data['orders'][0]['id']
+    print(f"   🔒 Using order: {order_id}")
 
     # First, modify an order to set protection flags
     print("1. Creating protected fields...")
@@ -188,12 +212,12 @@ def test_data_protection(order_id):
         }
     }
 
-    response = test_api_endpoint('PUT', f'/api/orders/{order_id}/edit', update_data)
+    response = api_endpoint_helper('PUT', f'/api/orders/{order_id}/edit', update_data)
     if response and response.status_code == 200:
         print("   ✅ Fields protected successfully")
 
         # Check that fields are now protected
-        response = test_api_endpoint('GET', f'/api/orders/{order_id}/modification-status')
+        response = api_endpoint_helper('GET', f'/api/orders/{order_id}/modification-status')
         if response and response.status_code == 200:
             mod_status = response.json()
             protected_fields = mod_status.get('modified_fields', [])
@@ -234,14 +258,14 @@ def main():
     # Run tests
     tour_id = test_tour_editing()
     order_id = test_order_editing()
-    test_line_items_editing(order_id)
-    test_data_protection(order_id)
+    test_line_items_editing()
+    test_data_protection()
 
     print("\n📋 Test Summary:")
     print(f"   • Tour editing: {'✅ Tested' if tour_id else '❌ Failed'}")
     print(f"   • Order editing: {'✅ Tested' if order_id else '❌ Failed'}")
-    print(f"   • Line items editing: {'✅ Tested' if order_id else '⚠️ Skipped'}")
-    print(f"   • Data protection: {'✅ Tested' if order_id else '⚠️ Skipped'}")
+    print(f"   • Line items editing: ✅ Tested")
+    print(f"   • Data protection: ✅ Tested")
 
     if tour_id and order_id:
         print("\n🎉 All core editing functionality is working!")

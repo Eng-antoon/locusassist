@@ -1181,6 +1181,10 @@ MAX_API_CALLS_PER_MINUTE = 12
 - `GET /api/tours` - **NEW**: Paginated tour data with automatic date conversion (orders date → tour date)
 - `GET /api/tours?date=YYYY-MM-DD&page=1&per_page=50` - Tour data with pagination and filtering
 - `GET /api/tours?search=TERM&sort_by=FIELD&sort_order=asc|desc` - Advanced tour search and sorting
+- `GET /api/tours/day` - **NEW**: Get all tours for a specific day (called once to fetch complete daily tour data)
+  - **Usage**: `GET /api/tours/day?date=YYYY-MM-DD`
+  - **Response**: Complete tour list with summary statistics (total tours, orders, completion rates)
+  - **Note**: Automatically converts orders date to tour date (date - 1 day)
 - `GET /api/tours/summary` - **NEW**: Tour summary statistics with cancelled order tracking
 - `GET /api/tours/summary?date=YYYY-MM-DD` - Tour statistics for specific date
 - `POST /api/tours/refresh` - **NEW**: Refresh tour data from orders (processes orders into tours)
@@ -1191,6 +1195,33 @@ MAX_API_CALLS_PER_MINUTE = 12
 - `GET /order/<order_id>` - **Enhanced**: Comprehensive order view with Task API integration, database fusion, and automatic backup
 - `POST /validate-order/<order_id>` - AI validation of GRN documents
 - `POST /reprocess-order/<order_id>` - Reprocess validation
+
+### Editing & Modification Endpoints
+- `PUT /api/tours/<tour_id>/edit` - **NEW**: Edit tour data with modification tracking
+  - **Content-Type**: `application/json`
+  - **Parameters**:
+    - `modified_by` (string): User making the modification
+    - `data` (object): Fields to update (e.g., `{"vehicle_registration": "NEW-123"}`)
+    - `propagate_to_orders` (boolean): Whether to propagate changes to associated orders (default: true)
+  - **Vehicle Name Editing**: Use field `vehicle_registration` to update vehicle name/registration
+  - **Example**:
+    ```json
+    {
+      "modified_by": "user@example.com",
+      "data": {
+        "vehicle_registration": "ABC-123",
+        "rider_name": "John Doe"
+      },
+      "propagate_to_orders": true
+    }
+    ```
+- `PUT /api/orders/<order_id>/edit` - **NEW**: Edit order data with modification tracking
+  - **Content-Type**: `application/json`
+  - **Parameters**: Same as tours, but affects single order only
+  - **Vehicle Name Editing**: Use field `vehicle_registration` to update vehicle name/registration
+- `PUT /api/orders/<order_id>/line-items/edit` - **NEW**: Edit order line items
+- `GET /api/orders/<order_id>/modification-status` - **NEW**: Get modification history and status
+- `GET /api/tours/<tour_id>/modification-status` - **NEW**: Get tour modification history
 
 ### Enhanced Order Details Features
 - **Data Source Priority**: Task API (real-time) → Order API (fallback) → Database (enhanced fields) → Error handling

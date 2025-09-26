@@ -1954,6 +1954,105 @@ def register_routes(app, config):
         result = tour_service.get_tour_details(tour_id)
         return jsonify(result)
 
+    @app.route('/api/tours/day', methods=['GET'])
+    def api_tours_of_the_day():
+        """API endpoint to get all tours for a specific day
+        This endpoint is called once to fetch all tours of the day."""
+        from app.tours import tour_service
+        from datetime import datetime, timedelta
+
+        try:
+            # Get the date parameter (defaults to today)
+            date = request.args.get('date')
+            if not date:
+                date = datetime.now().strftime("%Y-%m-%d")
+
+            # Validate date format
+            try:
+                datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid date format. Use YYYY-MM-DD'
+                }), 400
+
+            # Convert orders date to tour date (tours are created 1 day before orders)
+            try:
+                orders_date = datetime.strptime(date, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                tour_date_str = tour_date.strftime("%Y-%m-%d")
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid date format'
+                }), 400
+
+            # Get all tours for the specific day without pagination
+            result = tour_service.get_tours(
+                date=tour_date_str,
+                per_page=1000,  # Large number to get all tours
+                sort_by='tour_number',
+                sort_order='asc'
+            )
+
+            if not result['success']:
+                return jsonify({
+                    'success': False,
+                    'error': result.get('error', 'Failed to fetch tours')
+                }), 500
+
+            # Prepare response
+            tours = result['tours']
+
+            # Calculate summary statistics
+            total_tours = len(tours)
+            total_orders = sum(tour.get('total_orders', 0) for tour in tours)
+            completed_orders = sum(tour.get('completed_orders', 0) for tour in tours)
+            cancelled_orders = sum(tour.get('cancelled_orders', 0) for tour in tours)
+            pending_orders = sum(tour.get('pending_orders', 0) for tour in tours)
+
+            # Count unique riders and vehicles
+            unique_riders = len(set(tour.get('rider_name') for tour in tours if tour.get('rider_name')))
+            unique_vehicles = len(set(tour.get('vehicle_registration') for tour in tours if tour.get('vehicle_registration')))
+
+            # Calculate completion rate
+            completion_rate = 0
+            if total_orders > 0:
+                completion_rate = round(((completed_orders + cancelled_orders) / total_orders) * 100, 1)
+
+            response_data = {
+                'success': True,
+                'date': date,
+                'tour_date': tour_date_str,
+                'message': f'Found {total_tours} tours for {date}',
+                'summary': {
+                    'total_tours': total_tours,
+                    'total_orders': total_orders,
+                    'completed_orders': completed_orders,
+                    'cancelled_orders': cancelled_orders,
+                    'pending_orders': pending_orders,
+                    'unique_riders': unique_riders,
+                    'unique_vehicles': unique_vehicles,
+                    'completion_rate': completion_rate
+                },
+                'tours': tours
+            }
+
+            response = make_response(jsonify(response_data))
+            # Add cache-busting headers
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error getting tours of the day: {e}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            }), 500
+
     # Heatmap Routes
     @app.route('/heatmap')
     def heatmap_dashboard():
