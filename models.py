@@ -301,7 +301,10 @@ class Tour(db.Model):
 
     # Tour metadata
     rider_name = db.Column(db.String(255))
+    rider_id = db.Column(db.String(100))
+    rider_phone = db.Column(db.String(20))
     vehicle_registration = db.Column(db.String(100))
+    vehicle_id = db.Column(db.String(100))
     tour_start_time = db.Column(db.DateTime)
     tour_end_time = db.Column(db.DateTime)
 
@@ -313,6 +316,9 @@ class Tour(db.Model):
 
     # Tour status (WAITING, ONGOING, CANCELLED, COMPLETED)
     tour_status = db.Column(db.String(20), default='WAITING')
+
+    # Cancellation information for tours
+    cancellation_reason = db.Column(db.String(500))  # Reason for cancellation if tour was cancelled
 
     # Location summary
     delivery_cities = db.Column(db.Text)  # JSON array of cities
@@ -340,7 +346,10 @@ class Tour(db.Model):
             'tour_name': self.tour_name,
             'tour_number': self.tour_number,
             'rider_name': self.rider_name,
+            'rider_id': self.rider_id,
+            'rider_phone': self.rider_phone,
             'vehicle_registration': self.vehicle_registration,
+            'vehicle_id': self.vehicle_id,
             'tour_start_time': self.tour_start_time.isoformat() if self.tour_start_time else None,
             'tour_end_time': self.tour_end_time.isoformat() if self.tour_end_time else None,
             'total_orders': self.total_orders,
@@ -348,6 +357,7 @@ class Tour(db.Model):
             'cancelled_orders': self.cancelled_orders,
             'pending_orders': self.pending_orders,
             'tour_status': self.tour_status,
+            'cancellation_reason': self.cancellation_reason,
             'delivery_cities': json.loads(self.delivery_cities) if self.delivery_cities else [],
             'delivery_areas': json.loads(self.delivery_areas) if self.delivery_areas else [],
             # Editing support fields

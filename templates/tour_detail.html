@@ -95,6 +95,30 @@
                     </div>
                     <div class="col-md-6">
                         <div class="info-group">
+                            <label class="info-label">Rider ID</label>
+                            <div class="info-value editable-field" data-field="rider_id">
+                                <span class="display-value">
+                                    <i class="fas fa-id-badge me-2"></i>{{ tour.rider_id or 'Not assigned' }}
+                                </span>
+                                <input type="text" class="form-control edit-input d-none"
+                                       value="{{ tour.rider_id or '' }}" data-original="{{ tour.rider_id or '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Rider Phone</label>
+                            <div class="info-value editable-field" data-field="rider_phone">
+                                <span class="display-value">
+                                    <i class="fas fa-phone me-2"></i>{{ tour.rider_phone or 'Not assigned' }}
+                                </span>
+                                <input type="tel" class="form-control edit-input d-none"
+                                       value="{{ tour.rider_phone or '' }}" data-original="{{ tour.rider_phone or '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-group">
                             <label class="info-label">Vehicle Registration</label>
                             <div class="info-value editable-field" data-field="vehicle_registration">
                                 <span class="display-value">
@@ -114,6 +138,37 @@
                                 </span>
                                 <input type="text" class="form-control edit-input d-none"
                                        value="{{ tour.vehicle_id or '' }}" data-original="{{ tour.vehicle_id or '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Tour Status</label>
+                            <div class="info-value editable-field" data-field="tour_status">
+                                <span class="display-value">
+                                    <i class="fas fa-tasks me-2"></i>
+                                    <span class="badge bg-{{ 'danger' if tour.tour_status == 'CANCELLED' else 'success' if tour.tour_status == 'COMPLETED' else 'warning' if tour.tour_status == 'ONGOING' else 'secondary' }}">
+                                        {{ tour.tour_status or 'WAITING' }}
+                                    </span>
+                                </span>
+                                <select class="form-select edit-input d-none" data-original="{{ tour.tour_status or 'WAITING' }}">
+                                    <option value="WAITING" {{ 'selected' if (tour.tour_status or 'WAITING') == 'WAITING' else '' }}>WAITING</option>
+                                    <option value="ONGOING" {{ 'selected' if tour.tour_status == 'ONGOING' else '' }}>ONGOING</option>
+                                    <option value="COMPLETED" {{ 'selected' if tour.tour_status == 'COMPLETED' else '' }}>COMPLETED</option>
+                                    <option value="CANCELLED" {{ 'selected' if tour.tour_status == 'CANCELLED' else '' }}>CANCELLED</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-12" id="cancellation-reason-field" style="{{ 'display: none;' if tour.tour_status != 'CANCELLED' else '' }}">
+                        <div class="info-group">
+                            <label class="info-label">Cancellation Reason</label>
+                            <div class="info-value editable-field" data-field="cancellation_reason">
+                                <span class="display-value">
+                                    <i class="fas fa-exclamation-triangle text-danger me-2"></i>{{ tour.cancellation_reason or 'No reason provided' }}
+                                </span>
+                                <textarea class="form-control edit-input d-none" rows="3" placeholder="Enter cancellation reason..."
+                                         data-original="{{ tour.cancellation_reason or '' }}">{{ tour.cancellation_reason or '' }}</textarea>
                             </div>
                         </div>
                     </div>
@@ -414,6 +469,12 @@ function toggleTourEdit() {
             displayValue.classList.add('d-none');
             input.classList.remove('d-none');
         });
+
+        // Add event listener for tour status changes
+        const tourStatusSelect = document.querySelector('[data-field="tour_status"] .edit-input');
+        if (tourStatusSelect) {
+            tourStatusSelect.addEventListener('change', handleTourStatusChange);
+        }
     } else {
         cancelTourEdit();
     }
@@ -441,6 +502,19 @@ function cancelTourEdit() {
         displayValue.classList.remove('d-none');
         input.classList.add('d-none');
     });
+
+    // Remove event listener for tour status changes
+    const tourStatusSelect = document.querySelector('[data-field="tour_status"] .edit-input');
+    if (tourStatusSelect) {
+        tourStatusSelect.removeEventListener('change', handleTourStatusChange);
+    }
+
+    // Reset cancellation reason field visibility based on original status
+    const originalStatus = tourStatusSelect?.getAttribute('data-original') || 'WAITING';
+    const cancellationReasonField = document.getElementById('cancellation-reason-field');
+    if (cancellationReasonField) {
+        cancellationReasonField.style.display = (originalStatus === 'CANCELLED') ? 'block' : 'none';
+    }
 }
 
 function saveTourChanges() {
@@ -553,6 +627,64 @@ function showAlert(type, message) {
             alertDiv.remove();
         }
     }, 5000);
+}
+
+function handleTourStatusChange() {
+    const tourStatusSelect = document.querySelector('[data-field="tour_status"] .edit-input');
+    const cancellationReasonField = document.getElementById('cancellation-reason-field');
+    const cancellationReasonTextarea = document.querySelector('[data-field="cancellation_reason"] .edit-input');
+
+    if (!tourStatusSelect || !cancellationReasonField) {
+        return;
+    }
+
+    const selectedStatus = tourStatusSelect.value;
+
+    if (selectedStatus === 'CANCELLED') {
+        // Show cancellation reason field
+        cancellationReasonField.style.display = 'block';
+
+        // Focus on cancellation reason if it's empty
+        if (cancellationReasonTextarea && !cancellationReasonTextarea.value.trim()) {
+            setTimeout(() => {
+                cancellationReasonTextarea.focus();
+            }, 100);
+        }
+    } else {
+        // Hide cancellation reason field and clear its value
+        cancellationReasonField.style.display = 'none';
+
+        if (cancellationReasonTextarea) {
+            cancellationReasonTextarea.value = '';
+        }
+    }
+
+    // Update the display badge color immediately
+    const statusBadge = document.querySelector('[data-field="tour_status"] .display-value .badge');
+    if (statusBadge) {
+        // Remove all existing badge classes
+        statusBadge.className = statusBadge.className.replace(/bg-\w+/g, '');
+
+        // Add appropriate class based on status
+        let badgeClass = 'bg-secondary'; // default
+        switch(selectedStatus) {
+            case 'CANCELLED':
+                badgeClass = 'bg-danger';
+                break;
+            case 'COMPLETED':
+                badgeClass = 'bg-success';
+                break;
+            case 'ONGOING':
+                badgeClass = 'bg-warning';
+                break;
+            case 'WAITING':
+            default:
+                badgeClass = 'bg-secondary';
+                break;
+        }
+        statusBadge.classList.add(badgeClass);
+        statusBadge.textContent = selectedStatus;
+    }
 }
 </script>
 

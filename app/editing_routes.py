@@ -63,6 +63,16 @@ class EditingService:
 
                     # Only update if value changed
                     if old_value != new_value:
+                        # Special logic for tour_status changes
+                        if field_name == 'tour_status':
+                            # If changing from CANCELLED to non-CANCELLED, clear cancellation reason
+                            if old_value == 'CANCELLED' and new_value != 'CANCELLED':
+                                if hasattr(tour, 'cancellation_reason') and tour.cancellation_reason:
+                                    original_data['cancellation_reason'] = tour.cancellation_reason
+                                    setattr(tour, 'cancellation_reason', None)
+                                    self.track_field_modification(tour, 'cancellation_reason', None, modified_by)
+                                    updated_fields.append('cancellation_reason')
+
                         setattr(tour, field_name, new_value)
                         self.track_field_modification(tour, field_name, new_value, modified_by)
                         updated_fields.append(field_name)
@@ -77,24 +87,59 @@ class EditingService:
                 # Find orders linked to this tour using multiple approaches
                 orders = []
 
+                logger.info(f"Starting to find orders linked to tour {tour_id}")
+
                 # Method 1: Direct tour_id match (if populated)
                 direct_orders = Order.query.filter_by(tour_id=tour_id).all()
-                orders.extend(direct_orders)
+                if direct_orders:
+                    orders.extend(direct_orders)
+                    logger.info(f"Found {len(direct_orders)} orders with direct tour_id match")
 
-                # Method 2: If no direct matches, find by rider/vehicle match (for tours with unique combinations)
-                if not direct_orders:
-                    tour_rider = getattr(tour, 'rider_name', None)
-                    tour_vehicle = getattr(tour, 'vehicle_registration', None)
+                # Method 2: Find by rider/vehicle combination (always check this method too)
+                tour_rider = getattr(tour, 'rider_name', None)
+                tour_vehicle = getattr(tour, 'vehicle_registration', None)
+                tour_rider_id = getattr(tour, 'rider_id', None)
+                tour_vehicle_id = getattr(tour, 'vehicle_id', None)
 
-                    if tour_rider and tour_vehicle:
-                        indirect_orders = Order.query.filter(
-                            Order.rider_name == tour_rider,
-                            Order.vehicle_registration == tour_vehicle
-                        ).all()
-                        orders.extend(indirect_orders)
-                        logger.info(f"Found {len(indirect_orders)} orders linked to tour {tour_id} by rider/vehicle match")
+                # Multiple rider/vehicle matching strategies
+                if tour_rider and tour_vehicle:
+                    indirect_orders = Order.query.filter(
+                        Order.rider_name == tour_rider,
+                        Order.vehicle_registration == tour_vehicle
+                    ).all()
 
-                logger.info(f"Found {len(orders)} total orders to propagate tour changes to")
+                    # Add orders that aren't already in the list
+                    for order in indirect_orders:
+                        if order not in orders:
+                            orders.append(order)
+
+                    logger.info(f"Found {len(indirect_orders)} additional orders by rider_name + vehicle_registration match")
+
+                # Method 3: Match by rider_id and vehicle_id if available
+                if tour_rider_id and tour_vehicle_id:
+                    id_based_orders = Order.query.filter(
+                        Order.rider_id == tour_rider_id,
+                        Order.vehicle_id == tour_vehicle_id
+                    ).all()
+
+                    for order in id_based_orders:
+                        if order not in orders:
+                            orders.append(order)
+
+                    logger.info(f"Found {len(id_based_orders)} additional orders by rider_id + vehicle_id match")
+
+                # Method 4: Match by tour_name and tour_number
+                tour_name = getattr(tour, 'tour_name', None)
+                tour_number = getattr(tour, 'tour_number', None)
+
+                if tour_name:
+                    name_based_orders = Order.query.filter(Order.tour_name == tour_name).all()
+                    for order in name_based_orders:
+                        if order not in orders:
+                            orders.append(order)
+                    logger.info(f"Found {len(name_based_orders)} additional orders by tour_name match")
+
+                logger.info(f"Found {len(orders)} total unique orders to propagate tour changes to")
 
                 for order in orders:
                     order_updated = False
@@ -102,34 +147,37 @@ class EditingService:
                         # Map tour fields to order fields
                         order_field_map = {
                             'rider_name': 'rider_name',
+                            'rider_id': 'rider_id',
+                            'rider_phone': 'rider_phone',
                             'vehicle_registration': 'vehicle_registration',
                             'vehicle_id': 'vehicle_id',
                             'tour_name': 'tour_name',
-                            'tour_number': 'tour_number'
+                            'tour_number': 'tour_number',
+                            'tour_status': 'order_status',  # Tour status maps to order status
+                            'cancellation_reason': 'cancellation_reason'
                         }
 
                         if field_name in order_field_map and hasattr(order, order_field_map[field_name]):
-                            # Only update if order field wasn't manually modified
-                            order_modified_fields = []
-                            if order.modified_fields:
-                                order_modified_fields = json.loads(order.modified_fields)
-
-                            order_field_key = order_field_map[field_name]
-
-                            # Allow tour updates to override protected fields (as user requested)
-                            # This ensures tour changes always propagate to linked orders
-
                             # Get the updated value from the tour
                             tour_new_value = getattr(tour, field_name)
                             old_order_value = getattr(order, order_field_map[field_name])
 
-                            # Only update if the values are different
+                            # Always overwrite with tour data (no fallback protection)
                             if old_order_value != tour_new_value:
+                                # Special handling for tour status changes - also handle order cancellation reason
+                                if field_name == 'tour_status':
+                                    # If tour status changed from CANCELLED to non-CANCELLED, clear order cancellation reason too
+                                    if old_order_value == 'CANCELLED' and tour_new_value != 'CANCELLED':
+                                        if hasattr(order, 'cancellation_reason') and order.cancellation_reason:
+                                            setattr(order, 'cancellation_reason', None)
+                                            self.track_field_modification(order, 'cancellation_reason', None, f"Tour Update: {modified_by}")
+                                            logger.info(f"Cleared order {order.id} cancellation_reason due to tour status change")
+
                                 setattr(order, order_field_map[field_name], tour_new_value)
-                                # Track the actual field modification
+                                # Track the field modification
                                 self.track_field_modification(order, order_field_map[field_name], tour_new_value, f"Tour Update: {modified_by}")
                                 order_updated = True
-                                logger.info(f"Propagated {field_name} from tour to order {order.id}: '{old_order_value}' → '{tour_new_value}'")
+                                logger.info(f"Propagated {field_name} to order {order.id}: '{old_order_value}' → '{tour_new_value}'")
 
                     if order_updated:
                         propagated_orders += 1
@@ -199,6 +247,17 @@ class EditingService:
                         updated_fields.append(field_name)
                         logger.info(f"Updated order {order_id} field '{field_name}': '{old_value}' → '{new_value}'")
 
+                        # Special handling for order_status changes
+                        if field_name == 'order_status':
+                            # If status changed from CANCELLED to something else, clear cancellation reason
+                            if old_value == 'CANCELLED' and new_value != 'CANCELLED':
+                                if hasattr(order, 'cancellation_reason') and order.cancellation_reason:
+                                    original_data['cancellation_reason'] = order.cancellation_reason
+                                    setattr(order, 'cancellation_reason', None)
+                                    self.track_field_modification(order, 'cancellation_reason', None, modified_by)
+                                    updated_fields.append('cancellation_reason')
+                                    logger.info(f"Cleared cancellation_reason due to status change from CANCELLED to {new_value}")
+
             # Update special fields
             for field_name, new_value in special_updates.items():
                 if hasattr(order, field_name):
@@ -231,7 +290,7 @@ class EditingService:
             return {'success': False, 'error': str(e)}
 
     def update_order_line_items(self, order_id, line_items_data, modified_by):
-        """Update order line items with modification tracking"""
+        """Update order line items stored in orderMetadata JSON"""
         try:
             order = Order.query.filter_by(id=order_id).first()
             if not order:
@@ -244,69 +303,66 @@ class EditingService:
                 'errors': []
             }
 
-            # Get existing line items
-            existing_items = {item.id: item for item in order.line_items}
+            # Get existing orderMetadata from raw_data
+            raw_data = json.loads(order.raw_data) if order.raw_data else {}
+            order_metadata = raw_data.get('orderMetadata', {})
 
-            # Process provided line items
+            # Initialize lineItems if not present
+            if 'lineItems' not in order_metadata:
+                order_metadata['lineItems'] = []
+
+            # Replace all line items with the new ones
+            new_line_items = []
+
             for item_data in line_items_data:
                 try:
-                    item_id = item_data.get('id')
+                    # Create new line item in the expected JSON format
+                    new_item = {
+                        'id': item_data.get('sku_id', ''),
+                        'name': item_data.get('name', ''),
+                        'description': item_data.get('description', ''),
+                        'quantity': int(item_data.get('quantity', 0)),
+                        'weightPerUnit': {
+                            'unit': 'KG',
+                            'value': float(item_data.get('weight_per_unit', 0)) if item_data.get('weight_per_unit') else 0
+                        },
+                        'volumePerUnit': {
+                            'unit': 'CM',
+                            'value': float(item_data.get('volume_per_unit', 0)) if item_data.get('volume_per_unit') else 0
+                        },
+                        'quantityUnit': item_data.get('quantity_unit', 'PIECES'),
+                        'handlingUnit': item_data.get('handling_unit', 'PIECES'),
+                        'transactionStatus': {
+                            'orderedQuantity': int(item_data.get('quantity', 0)),
+                            'transactedQuantity': 0,
+                            'status': 'NOT_DELIVERED'
+                        }
+                    }
 
-                    if item_id and item_id in existing_items:
-                        # Update existing item
-                        item = existing_items[item_id]
-                        updated_fields = []
-
-                        for field_name, new_value in item_data.items():
-                            if field_name != 'id' and hasattr(item, field_name):
-                                old_value = getattr(item, field_name)
-                                if old_value != new_value:
-                                    setattr(item, field_name, new_value)
-                                    updated_fields.append(field_name)
-
-                        if updated_fields:
-                            item.is_modified = True
-                            item.last_modified_by = modified_by
-                            item.last_modified_at = datetime.now(timezone.utc)
-                            results['updated'] += 1
-
-                    else:
-                        # Add new item
-                        new_item = OrderLineItem(
-                            order_id=order_id,
-                            sku_id=item_data.get('sku_id', ''),
-                            name=item_data.get('name', ''),
-                            quantity=item_data.get('quantity', 0),
-                            quantity_unit=item_data.get('quantity_unit', 'PIECES'),
-                            transacted_quantity=item_data.get('transacted_quantity'),
-                            transaction_status=item_data.get('transaction_status'),
-                            is_modified=True,
-                            last_modified_by=modified_by,
-                            last_modified_at=datetime.now(timezone.utc)
-                        )
-                        db.session.add(new_item)
-                        results['added'] += 1
+                    new_line_items.append(new_item)
+                    results['added'] += 1
 
                 except Exception as e:
-                    results['errors'].append(f"Error processing item {item_data.get('id', 'new')}: {str(e)}")
+                    results['errors'].append(f"Error processing item {item_data.get('sku_id', 'unknown')}: {str(e)}")
+                    logger.error(f"Error processing line item: {e}")
 
-            # Handle deleted items (items that were in existing but not in provided data)
-            provided_ids = {item.get('id') for item in line_items_data if item.get('id')}
-            items_to_delete = request.json.get('deleted_item_ids', [])
+            # Update the orderMetadata with new line items
+            order_metadata['lineItems'] = new_line_items
 
-            for item_id in items_to_delete:
-                if item_id in existing_items:
-                    db.session.delete(existing_items[item_id])
-                    results['deleted'] += 1
+            # Save modified orderMetadata back to raw_data
+            raw_data['orderMetadata'] = order_metadata
+            order.raw_data = json.dumps(raw_data)
 
             # Update order modification tracking
-            self.track_field_modification(order, 'line_items', f"Modified {results['updated']}, Added {results['added']}, Deleted {results['deleted']}", modified_by)
+            self.track_field_modification(order, 'line_items', f"Updated {results['added']} line items", modified_by)
 
             db.session.commit()
 
+            logger.info(f"Updated line items for order {order_id}: {results['added']} items by {modified_by}")
+
             return {
                 'success': True,
-                'message': f'Line items updated: {results["added"]} added, {results["updated"]} updated, {results["deleted"]} deleted',
+                'message': f'Line items updated: {results["added"]} added, 0 updated, 0 deleted',
                 'results': results
             }
 
@@ -635,12 +691,15 @@ def register_editing_routes(app):
             if not order:
                 return jsonify({'success': False, 'error': 'Order not found'}), 404
 
-            # Update transaction details in orderMetadata
-            if not order.orderMetadata or not order.orderMetadata.get('lineItems'):
+            # Update transaction details in raw_data (orderMetadata)
+            raw_data = json.loads(order.raw_data) if order.raw_data else {}
+            order_metadata = raw_data.get('orderMetadata', {})
+
+            if not order_metadata or not order_metadata.get('lineItems'):
                 return jsonify({'success': False, 'error': 'No line items found in order'}), 400
 
             updated_items = 0
-            line_items = order.orderMetadata.get('lineItems', [])
+            line_items = order_metadata.get('lineItems', [])
 
             # Create a mapping from transaction ID to update data
             transaction_updates = {str(txn['id']): txn for txn in transactions}
@@ -675,6 +734,10 @@ def register_editing_routes(app):
                         transaction_status['status'] = update_data['status']
 
                     updated_items += 1
+
+            # Update the order's raw_data with the modified metadata
+            raw_data['orderMetadata'] = order_metadata
+            order.raw_data = json.dumps(raw_data)
 
             # Mark the order as modified and track the fields
             track_field_modification(order, 'transaction_details', modified_by)

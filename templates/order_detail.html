@@ -1561,9 +1561,20 @@ function saveOrderChanges() {
 
             cancelOrderEdit();
 
-            // If status changed to CANCELLED, show cancellation section
+            // Handle status change notifications
             if (changes.order_status === 'CANCELLED') {
                 showOrderAlert('info', 'Order marked as cancelled. You can now add cancellation reason and images.');
+            } else if (data.updated_fields && data.updated_fields.includes('cancellation_reason')) {
+                // Check if cancellation reason was cleared due to status change
+                const cancellationField = document.querySelector('[data-field="cancellation_reason"]');
+                if (cancellationField) {
+                    const cancellationDisplay = cancellationField.querySelector('.display-value');
+                    const cancellationInput = cancellationField.querySelector('.edit-input');
+                    cancellationDisplay.textContent = 'Not specified';
+                    cancellationInput.value = '';
+                    cancellationInput.setAttribute('data-original', '');
+                }
+                showOrderAlert('info', 'Order status changed. Cancellation reason has been cleared.');
             }
         } else {
             showOrderAlert('danger', `Error: ${data.error}`);

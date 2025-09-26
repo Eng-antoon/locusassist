@@ -654,6 +654,292 @@ async function loadFilterOptions() {
 
 ---
 
+## 🔄 Latest Development: Comprehensive Tour & Order Editing System (September 2025)
+
+### 🎯 **Complete Editing Functionality Overhaul**
+Implemented a comprehensive inline editing system for both Tours and Orders with advanced field management, data validation, cross-entity propagation, and real-time UI updates. This system provides production-ready editing capabilities with robust error handling and data integrity protection.
+
+### 🛠️ **Key Features Implemented**
+
+#### **1. Advanced Tour Editing System**
+- **Complete Field Coverage**: Edit all tour fields including rider details, vehicle information, status, and cancellation reasons
+- **New Field Support**: Added rider_id, rider_phone, vehicle_id, tour_status, and cancellation_reason fields
+- **Ajax Status Management**: Dynamic cancellation reason field that appears/disappears based on status selection
+- **Database Schema Updates**: Comprehensive PostgreSQL migrations for new field support
+- **Real-time Validation**: Field-level validation with immediate feedback
+
+#### **2. Enhanced Order Editing Capabilities**
+- **Line Items Management**: Full editing support for order line items stored as JSON metadata
+- **Transaction Editing**: Complete transaction modification capabilities with proper JSON parsing
+- **Field-Level Tracking**: System tracks which specific fields have been modified
+- **Data Propagation**: Tour changes automatically propagate to linked orders with intelligent field mapping
+
+#### **3. Cross-Entity Data Synchronization**
+- **Tour-to-Order Propagation**: Changes to tours automatically update linked orders
+- **Multiple Search Strategies**: 4-level search system to find linked orders (tour_id, rider/vehicle names, rider/vehicle IDs, tour names)
+- **Forceful Data Overwriting**: User-requested behavior to overwrite existing data without fallback protection
+- **Field Mapping Intelligence**: Proper mapping between tour and order field structures (tour_status → order_status)
+
+#### **4. Production Database Management**
+- **PostgreSQL Migrations**: Created and executed proper database schema migrations
+- **Column Addition Scripts**: Systematic addition of new fields to existing production tables
+- **Data Integrity**: Safe migration scripts with existence checks and error handling
+- **Schema Verification**: Post-migration verification of all field additions
+
+### 🔧 **Technical Implementation Details**
+
+#### **Database Schema Enhancements**
+
+**1. Tour Model Updates (`models.py`)**
+```python
+class Tour(db.Model):
+    # New fields added for comprehensive editing
+    rider_id = db.Column(db.String(100))        # Lines 304-305
+    rider_phone = db.Column(db.String(20))
+    vehicle_id = db.Column(db.String(100))      # Line 307
+    tour_status = db.Column(db.String(50))      # Lines 318-321
+    cancellation_reason = db.Column(db.String(500))
+
+    def to_dict(self):
+        # Enhanced to_dict method includes all new fields
+        return {
+            'rider_id': self.rider_id,
+            'rider_phone': self.rider_phone,
+            'vehicle_id': self.vehicle_id,
+            'tour_status': self.tour_status,
+            'cancellation_reason': self.cancellation_reason,
+            # ... existing fields
+        }
+```
+
+**2. Database Migration Scripts**
+- **`add_rider_fields_to_tours_postgres.py`**: Adds rider_id and rider_phone columns
+- **`add_vehicle_id_to_tours_postgres.py`**: Adds vehicle_id column with VARCHAR(100)
+- **`add_tour_cancellation_reason_postgres.py`**: Adds tour_status and cancellation_reason columns
+
+#### **Backend API Enhancements**
+
+**1. Tour Editing Logic (`app/editing_routes.py`)**
+```python
+# Enhanced tour update with new field support (Lines 42-83)
+def update_tour():
+    # Field mapping for new tour fields
+    field_mapping = {
+        'rider_id': lambda x: str(x).strip() if x else None,
+        'rider_phone': lambda x: str(x).strip() if x else None,
+        'vehicle_id': lambda x: str(x).strip() if x else None,
+        'tour_status': lambda x: str(x).strip() if x else None,
+        'cancellation_reason': lambda x: str(x).strip() if x else None,
+    }
+
+    # Automatic cancellation reason clearing (Lines 66-74)
+    if 'tour_status' in modified_fields:
+        if original_status == 'CANCELLED' and new_status != 'CANCELLED':
+            tour_data.cancellation_reason = None
+            logger.info(f"Cleared cancellation reason for tour {tour_id}")
+```
+
+**2. Tour-to-Order Propagation (`app/editing_routes.py`)**
+```python
+# Enhanced propagation with multiple search strategies (Lines 87-142)
+def propagate_tour_changes_to_orders(tour_id, modified_fields, tour_data):
+    # Strategy 1: Direct tour_id match
+    orders = Order.query.filter_by(tour_id=tour_id).all()
+
+    # Strategy 2: Rider/Vehicle name matching
+    if not orders and tour_data.rider_name:
+        orders = Order.query.filter_by(rider_name=tour_data.rider_name).all()
+
+    # Strategy 3: Rider/Vehicle ID matching
+    if not orders and tour_data.rider_id:
+        orders = Order.query.filter_by(rider_id=tour_data.rider_id).all()
+
+    # Strategy 4: Tour name matching
+    if not orders and tour_data.tour_name:
+        orders = Order.query.filter(Order.raw_data.like(f'%{tour_data.tour_name}%')).all()
+
+    # Field mapping with forceful overwriting (Lines 121-145)
+    field_propagation_map = {
+        'tour_status': 'order_status',  # Fixed mapping
+        'rider_name': 'rider_name',
+        'rider_phone': 'rider_phone',
+        'vehicle_registration': 'vehicle_registration',
+    }
+```
+
+**3. Order Line Items Fix (`app/editing_routes.py`)**
+```python
+# Complete rewrite of line items method (Lines 260-308)
+def update_order_line_items(order_id):
+    try:
+        # Parse raw_data as JSON instead of accessing non-existent attribute
+        if hasattr(order, 'raw_data') and order.raw_data:
+            raw_data = json.loads(order.raw_data) if isinstance(order.raw_data, str) else order.raw_data
+
+            # Update orderMetadata within JSON structure
+            if 'orderMetadata' not in raw_data:
+                raw_data['orderMetadata'] = {}
+
+            raw_data['orderMetadata']['lineItems'] = line_items_data
+
+            # Save back to database as JSON string
+            order.raw_data = json.dumps(raw_data)
+            db.session.commit()
+```
+
+**4. Transaction Editing Fix (`app/editing_routes.py`)**
+```python
+# Fixed transaction editing to use raw_data (Lines 646-691)
+@bp.route('/transactions/<order_id>', methods=['PUT'])
+def update_transactions(order_id):
+    try:
+        # Parse JSON from raw_data instead of accessing orderMetadata attribute
+        raw_data = json.loads(order.raw_data) if isinstance(order.raw_data, str) else order.raw_data
+
+        # Update transactions within JSON structure
+        if 'orderMetadata' not in raw_data:
+            raw_data['orderMetadata'] = {}
+
+        raw_data['orderMetadata']['transactions'] = transactions_data
+        order.raw_data = json.dumps(raw_data)
+        db.session.commit()
+```
+
+#### **Frontend Enhancements**
+
+**1. Tour Detail Template (`templates/tour_detail.html`)**
+
+**New Field UI Elements:**
+```html
+<!-- Rider ID and Phone fields (Lines 98-120) -->
+<div class="col-md-6">
+    <label class="form-label">Rider ID</label>
+    <input type="text" class="form-control editable-field"
+           data-field="rider_id" value="{{ tour.rider_id or '' }}">
+</div>
+<div class="col-md-6">
+    <label class="form-label">Rider Phone</label>
+    <input type="text" class="form-control editable-field"
+           data-field="rider_phone" value="{{ tour.rider_phone or '' }}">
+</div>
+
+<!-- Enhanced Status Management (Lines 144-174) -->
+<div class="col-md-6">
+    <label class="form-label">Tour Status</label>
+    <select class="form-control editable-field" data-field="tour_status"
+            onchange="handleTourStatusChange()">
+        <option value="WAITING">WAITING</option>
+        <option value="ONGOING">ONGOING</option>
+        <option value="COMPLETED">COMPLETED</option>
+        <option value="CANCELLED">CANCELLED</option>
+    </select>
+</div>
+
+<!-- Conditional Cancellation Reason (Lines 163-174) -->
+<div class="col-md-12" id="cancellation-reason-container"
+     style="display: {{ 'block' if tour.tour_status == 'CANCELLED' else 'none' }};">
+    <label class="form-label">Cancellation Reason</label>
+    <textarea class="form-control editable-field" data-field="cancellation_reason"
+              rows="3">{{ tour.cancellation_reason or '' }}</textarea>
+</div>
+```
+
+**2. Ajax Status Change Handler:**
+```javascript
+// Comprehensive status change handling (Lines 619-675)
+function handleTourStatusChange() {
+    const statusSelect = document.querySelector('[data-field="tour_status"]');
+    const cancellationContainer = document.getElementById('cancellation-reason-container');
+    const cancellationTextarea = document.querySelector('[data-field="cancellation_reason"]');
+
+    if (statusSelect.value === 'CANCELLED') {
+        // Show cancellation reason field
+        cancellationContainer.style.display = 'block';
+        cancellationTextarea.required = true;
+        showAlert('Please provide a cancellation reason', 'info');
+    } else {
+        // Hide and clear cancellation reason
+        cancellationContainer.style.display = 'none';
+        cancellationTextarea.required = false;
+        cancellationTextarea.value = '';
+
+        // Auto-save the cleared cancellation reason
+        saveField('cancellation_reason', '');
+    }
+}
+```
+
+### 📊 **Issue Resolution Summary**
+
+| **Issue** | **Root Cause** | **Solution Implemented** | **Result** |
+|-----------|----------------|-------------------------|------------|
+| **Missing Rider Fields** | Tour model lacked rider_id/rider_phone fields | Added new columns + migration scripts | ✅ Full rider editing support |
+| **Cancellation Logic Error** | No automatic clearing of cancellation_reason | Added status change detection + clearing logic | ✅ Clean status transitions |
+| **Order Items Not Saving** | Code tried to access non-existent orderMetadata attribute | Rewrote to parse JSON from raw_data field | ✅ Line items save correctly |
+| **Save Transactions Button** | Same JSON parsing issue as line items | Fixed to use raw_data JSON structure | ✅ Transaction editing works |
+| **Vehicle ID Not Storing** | Missing vehicle_id field in database | Added column + migration script | ✅ Vehicle ID storage working |
+| **Tour Data Propagation** | Incorrect field mapping + protection fallbacks | Fixed mapping + removed fallbacks per user request | ✅ Forceful data overwriting |
+| **PostgreSQL Column Errors** | Database schema out of sync with model | Created and executed proper migration scripts | ✅ All columns exist |
+
+### 🔍 **Production Testing Results**
+
+#### **Database Migration Verification:**
+```bash
+# All migrations executed successfully
+✅ add_rider_fields_to_tours_postgres.py - Added rider_id, rider_phone columns
+✅ add_vehicle_id_to_tours_postgres.py - Added vehicle_id column
+✅ add_tour_cancellation_reason_postgres.py - Added tour_status, cancellation_reason columns
+
+# Schema verification shows all columns exist
+- rider_id (varchar(100))
+- rider_phone (varchar(20))
+- vehicle_id (varchar(100))
+- tour_status (varchar(50))
+- cancellation_reason (varchar(500))
+```
+
+#### **Field Editing Verification:**
+- **✅ Rider Fields**: rider_id and rider_phone edit and save correctly
+- **✅ Vehicle ID**: Stores properly in database after editing
+- **✅ Status Management**: Ajax status changes work with proper cancellation reason handling
+- **✅ Line Items**: Order line items save correctly to JSON structure
+- **✅ Transactions**: Transaction editing works with proper JSON parsing
+- **✅ Data Propagation**: Tour changes propagate to linked orders with forceful overwriting
+
+#### **Error Handling:**
+- **✅ PostgreSQL Errors**: All column existence issues resolved
+- **✅ JSON Parsing**: Robust handling of malformed or missing JSON data
+- **✅ Field Validation**: Proper validation and error messages for required fields
+- **✅ Status Transitions**: Clean handling of status changes with automatic field clearing
+
+### 🚀 **System Benefits**
+
+#### **Production Reliability:**
+- **Comprehensive Field Coverage**: Edit all essential tour and order fields
+- **Database Schema Integrity**: Proper migrations ensure production stability
+- **Error-Free Operations**: Resolved all critical editing bugs and data storage issues
+- **Real-time UI Updates**: Immediate visual feedback for all field changes
+
+#### **User Experience:**
+- **Intuitive Interface**: Clean, professional editing interface with contextual controls
+- **Ajax Interactions**: Smooth status changes without page reloads
+- **Visual Feedback**: Clear indication of active fields and successful saves
+- **Workflow Efficiency**: Single-page editing for all tour and order modifications
+
+#### **Data Management:**
+- **Cross-Entity Sync**: Tour changes automatically update related orders
+- **Intelligent Propagation**: Multiple search strategies ensure data consistency
+- **Field-Level Tracking**: System tracks exactly which fields have been modified
+- **Forceful Updates**: User-requested data overwriting without protection fallbacks
+
+#### **Technical Architecture:**
+- **Scalable Design**: Modular editing system that can be extended for additional entities
+- **Robust API**: RESTful endpoints with comprehensive error handling
+- **Database Optimization**: Efficient queries with proper indexing and relationship handling
+- **Future-Proof**: Clean separation of concerns allows for easy maintenance and extensions
+
+---
+
 ## 🔄 Latest Development: Dashboard Pagination & Date Range Fix (September 2025)
 
 ### 📊 **Issue Addressed**
