@@ -201,20 +201,13 @@
     </div>
 </div>
 
+
 <!-- Map Container -->
 <div class="row">
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-body p-0">
                 <div id="heatmap-container" style="height: 600px; position: relative;">
-                    <div id="loading-overlay" class="d-flex align-items-center justify-content-center position-absolute w-100 h-100" style="background: rgba(255,255,255,0.9); z-index: 1000;">
-                        <div class="text-center">
-                            <div class="spinner-border text-primary mb-3" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="text-muted">Loading heatmap data...</p>
-                        </div>
-                    </div>
                     <div id="map" style="height: 100%; width: 100%;"></div>
                 </div>
             </div>
@@ -247,10 +240,6 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""/>
-
 <style>
 .heatmap-legend {
     display: flex;
@@ -276,9 +265,10 @@
     text-align: center;
 }
 
-.leaflet-popup-content {
+.gm-popup-content {
     margin: 8px;
     line-height: 1.6;
+    max-width: 300px;
 }
 
 .popup-header {
@@ -327,41 +317,62 @@
 #heatmap-container.fullscreen #map {
     height: 100vh !important;
 }
+
+/* Google Maps custom styles */
+.gm-style-iw {
+    padding: 0;
+    border-radius: 8px;
+}
+
+.gm-style-iw-c {
+    padding: 12px;
+}
+
+.gm-style-iw-d {
+    overflow: auto !important;
+}
+
+/* Modern loading animation */
+@keyframes heatmapPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* Performance optimization for Google Maps */
+#map {
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Loading overlay animation */
+#loading-overlay {
+    transition: opacity 0.3s ease-in-out;
+}
+
+#loading-overlay .spinner-border {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 </style>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""></script>
-<script>
-// Load heatmap plugin with fallback
-(function loadHeatmapPlugin() {
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-    script.onerror = function() {
-        console.warn('Primary heatmap plugin failed to load, trying fallback CDN...');
-        const fallbackScript = document.createElement('script');
-        fallbackScript.src = 'https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.min.js';
-        fallbackScript.onerror = function() {
-            console.warn('Heatmap plugin failed to load from all CDNs, using fallback visualization');
-        };
-        document.head.appendChild(fallbackScript);
-    };
-    document.head.appendChild(script);
-})();
-</script>
 
 <script>
-// Heatmap dashboard state
+// Google Maps Heatmap dashboard state
 let currentFilters = {
     date: '{{ selected_date }}', // Initialize with server date
     aggregation_level: 'area'
 };
 
 let map = null;
-let heatmapLayer = null;
-let markersLayer = null;
+let heatmapCircles = []; // Store heatmap circles separately
+let locationMarkers = []; // Store location markers separately
+let infoWindow = null;
 let heatmapData = [];
 
 // Function to get the current date from the orders page (localStorage or default)
@@ -379,51 +390,14 @@ function getOrdersPageDate() {
     return serverDate;
 }
 
-// Initialize heatmap dashboard
-document.addEventListener('DOMContentLoaded', async function() {
-    // Set the proper date first
-    currentFilters.date = getOrdersPageDate();
-    console.log('Initialized with date:', currentFilters.date);
+// DOM Content Loaded - Wait for Google Maps to initialize
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 === DOM READY - WAITING FOR GOOGLE MAPS ===');
 
-    initializeControlsPanel();
-    initializeMap();
+    // Show loading while waiting for Google Maps API
+    showLoading();
 
-    // Force hide loading overlay after 3 seconds as fallback
-    setTimeout(() => {
-        const loadingOverlay = document.getElementById('loading-overlay');
-        if (loadingOverlay && loadingOverlay.style.display !== 'none') {
-            console.log('Force hiding loading overlay after timeout');
-            loadingOverlay.style.display = 'none';
-        }
-    }, 3000);
-
-    // Update the displayed date from orders page
-    updateDisplayedDate();
-
-    // Load initial heatmap data
-    await loadHeatmapData();
-
-    // Update last updated time
-    updateLastUpdatedTime();
-
-    // Listen for storage events to update when orders page changes date
-    window.addEventListener('storage', async function(e) {
-        if (e.key === 'selectedDate' && e.newValue !== e.oldValue) {
-            console.log('Date changed in orders page from', e.oldValue, 'to', e.newValue);
-            currentFilters.date = e.newValue;
-            updateDisplayedDate();
-            // Reload heatmap data when date changes
-            await loadHeatmapData();
-        }
-    });
-
-    // Listen for page visibility changes to refresh when user returns to tab
-    document.addEventListener('visibilitychange', function() {
-        if (!document.hidden) {
-            console.log('Tab became visible, refreshing heatmap...');
-            refreshHeatmap();
-        }
-    });
+    console.log('📡 Google Maps will be loaded dynamically...');
 });
 
 function initializeControlsPanel() {
@@ -465,22 +439,115 @@ function initializeControlsPanel() {
     document.getElementById('show-heatmap').addEventListener('change', toggleHeatmapLayer);
 }
 
-function initializeMap() {
-    // Initialize Leaflet map
-    map = L.map('map').setView([28.6139, 77.2090], 10); // Default to Delhi
+// Initialize Google Maps (called by the API callback)
+function initMap() {
+    console.log('🗺️ Starting Google Maps initialization...');
 
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    try {
+        // Initialize Google Maps
+        console.log('📍 Creating Google Maps instance...');
+        map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 10,
+            center: { lat: 28.6139, lng: 77.2090 }, // Default to Delhi
+            mapTypeId: google.maps.MapTypeId.ROADMAP,
+            styles: [
+                {
+                    featureType: 'poi',
+                    elementType: 'labels',
+                    stylers: [{ visibility: 'off' }]
+                }
+            ]
+        });
 
-    // Initialize layers
-    markersLayer = L.layerGroup().addTo(map);
+        console.log('✓ Google Maps created successfully');
 
-    // Hide loading overlay once map is ready
-    map.whenReady(function() {
-        console.log('Map is ready');
-        document.getElementById('loading-overlay').style.display = 'none';
+        // Initialize InfoWindow
+        infoWindow = new google.maps.InfoWindow();
+
+        // Initialize the heatmap dashboard after map is ready
+        google.maps.event.addListenerOnce(map, 'idle', function() {
+            console.log('✅ Google Maps is ready and rendered');
+            initializeHeatmapDashboard();
+        });
+
+        // Ensure map resize on window resize
+        window.addEventListener('resize', function() {
+            setTimeout(() => {
+                if (map) {
+                    google.maps.event.trigger(map, 'resize');
+                }
+            }, 100);
+        });
+
+    } catch (error) {
+        console.error('❌ Failed to create Google Maps:', error);
+        return;
+    }
+
+    console.log('✓ Google Maps initialization completed');
+}
+
+// Initialize heatmap dashboard after map is ready
+function initializeHeatmapDashboard() {
+    console.log('🚀 === GOOGLE MAPS HEATMAP INITIALIZATION STARTED ===');
+
+    // Set the proper date first
+    currentFilters.date = getOrdersPageDate();
+    console.log('✓ Initialized with date:', currentFilters.date);
+
+    console.log('📋 Initializing controls panel...');
+    initializeControlsPanel();
+    console.log('✓ Controls panel initialized');
+
+    // Update the displayed date from orders page
+    console.log('📅 Updating displayed date...');
+    updateDisplayedDate();
+    console.log('✓ Date display updated');
+
+    // Load initial heatmap data
+    console.log('📊 Loading initial heatmap data...');
+    loadHeatmapData().then(() => {
+        console.log('✓ Initial heatmap data loading completed');
+    }).catch((error) => {
+        console.error('❌ Failed to load initial heatmap data:', error);
+        hideLoading();
+        showError('Failed to load heatmap data. Please try refreshing the page.');
+    });
+
+    // Update last updated time
+    console.log('⏰ Updating last updated time...');
+    updateLastUpdatedTime();
+    console.log('✓ Last updated time set');
+
+    console.log('🎉 === GOOGLE MAPS HEATMAP INITIALIZATION COMPLETED ===');
+
+    // Ultimate Loading Failsafe - Ensure loading NEVER gets stuck
+    setTimeout(() => {
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay && getComputedStyle(loadingOverlay).display !== 'none') {
+            console.warn('🚨 ULTIMATE FAILSAFE: Loading was still visible after initialization!');
+            loadingOverlay.style.display = 'none';
+            console.log('✅ Failsafe: Loading overlay force-hidden');
+        }
+    }, 1000);
+
+    // Listen for storage events to update when orders page changes date
+    window.addEventListener('storage', async function(e) {
+        if (e.key === 'selectedDate' && e.newValue !== e.oldValue) {
+            console.log('Date changed in orders page from', e.oldValue, 'to', e.newValue);
+            currentFilters.date = e.newValue;
+            updateDisplayedDate();
+            // Reload heatmap data when date changes
+            await loadHeatmapData();
+        }
+    });
+
+    // Listen for page visibility changes to refresh when user returns to tab
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log('Tab became visible, refreshing heatmap...');
+            refreshHeatmap();
+        }
     });
 }
 
@@ -492,8 +559,11 @@ function updateDisplayedDate() {
 }
 
 async function loadHeatmapData() {
+    console.log('📊 === STARTING HEATMAP DATA LOADING ===');
     try {
-        console.log('Loading heatmap data with filters:', currentFilters);
+        console.log('📋 Current filters:', currentFilters);
+
+        console.log('⏳ Showing loading overlay...');
         showLoading();
 
         // Build query parameters
@@ -504,39 +574,74 @@ async function loadHeatmapData() {
         params.append('aggregation_level', currentFilters.aggregation_level);
 
         const apiUrl = `/api/heatmap?${params}`;
-        console.log('Fetching heatmap data from:', apiUrl);
+        console.log('🌐 API URL:', apiUrl);
+        console.log('📤 Making fetch request...');
 
+        const startTime = Date.now();
         const response = await fetch(apiUrl);
-        const result = await response.json();
+        const fetchTime = Date.now() - startTime;
+        console.log(`✓ Fetch completed in ${fetchTime}ms`);
 
-        console.log('Heatmap API response:', result);
+        console.log('📥 Response status:', response.status, response.statusText);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        console.log('📄 Parsing JSON response...');
+        const result = await response.json();
+        console.log('✓ JSON parsed successfully');
+
+        console.log('📊 API Response structure:', {
+            success: result.success,
+            heatmapDataLength: result.heatmap_data ? result.heatmap_data.length : 'undefined',
+            hasStatistics: !!result.statistics,
+            needsExtraction: result.needs_coordinate_extraction,
+            ordersWithoutCoords: result.orders_without_coordinates,
+            error: result.error
+        });
 
         if (result.success) {
+            console.log('✅ API call successful');
             heatmapData = result.heatmap_data;
+            console.log('📊 Heatmap data loaded:', heatmapData.length, 'points');
+
+            console.log('📈 Displaying statistics...');
             displayHeatmapStats(result.statistics);
+            console.log('✓ Statistics displayed');
 
             // Check if coordinate extraction is needed
             if (result.needs_coordinate_extraction && result.orders_without_coordinates > 0) {
+                console.log('⚠️ Coordinate extraction needed for', result.orders_without_coordinates, 'orders');
                 showCoordinateExtractionPrompt(result.orders_without_coordinates, currentFilters.date);
+                hideLoading();
+                console.log('✓ Loading hidden (extraction prompt shown)');
             } else {
+                console.log('🗺️ Updating map visualization...');
                 updateMapVisualization();
+                console.log('✓ Map visualization updated');
+                hideLoading();
+                console.log('✓ Loading hidden');
             }
-            console.log('Loaded', heatmapData.length, 'heatmap points');
+            console.log('✅ Successfully loaded', heatmapData.length, 'heatmap points');
         } else {
-            console.error('API error:', result.error);
+            console.error('❌ API returned error:', result.error);
             showError('Failed to load heatmap data: ' + (result.error || 'Unknown error'));
             heatmapData = [];
             updateMapVisualization();
+            hideLoading();
+            console.log('✓ Loading hidden (after error)');
         }
 
     } catch (error) {
-        console.error('Error loading heatmap data:', error);
+        console.error('❌ Exception during heatmap data loading:', error);
+        console.error('Stack trace:', error.stack);
         showError('Error loading heatmap data. Please try again.');
         heatmapData = [];
         updateMapVisualization();
-    } finally {
         hideLoading();
+        console.log('✓ Loading hidden (after exception)');
     }
+    console.log('📊 === HEATMAP DATA LOADING COMPLETED ===');
 }
 
 function displayHeatmapStats(stats) {
@@ -594,111 +699,284 @@ function displayHeatmapStats(stats) {
 }
 
 function updateMapVisualization() {
+    console.log('🗺️ === STARTING GOOGLE MAPS VISUALIZATION UPDATE ===');
+    console.log('📊 Heatmap data points:', heatmapData ? heatmapData.length : 'null/undefined');
+
     // Clear existing layers
-    if (heatmapLayer) {
-        map.removeLayer(heatmapLayer);
-    }
-    markersLayer.clearLayers();
+    console.log('🧹 Clearing existing layers...');
+
+    // Clear heatmap circles
+    heatmapCircles.forEach(circle => {
+        circle.setMap(null);
+    });
+    heatmapCircles = [];
+
+    // Clear location markers
+    locationMarkers.forEach(marker => {
+        marker.setMap(null);
+    });
+    locationMarkers = [];
+    console.log('✓ Layers cleared');
 
     if (!heatmapData || heatmapData.length === 0) {
-        // Center map on Egypt when no data
-        map.setView([30.0444, 31.2357], 10); // Cairo, Egypt
+        console.log('⚠️ No heatmap data available - centering on default location');
+        // Center map on Delhi when no data
+        map.setCenter({ lat: 28.6139, lng: 77.2090 });
+        map.setZoom(10);
+        console.log('✓ Map centered on default location');
         return;
+    }
+
+    console.log('✓ Have', heatmapData.length, 'data points to visualize');
+
+    // Log sample of first data point for debugging
+    if (heatmapData.length > 0) {
+        const samplePoint = heatmapData[0];
+        console.log('📍 Sample data point:', {
+            latitude: samplePoint.latitude,
+            longitude: samplePoint.longitude,
+            intensity: samplePoint.intensity,
+            order_count: samplePoint.order_count,
+            location_name: samplePoint.location_name
+        });
     }
 
     // Add heatmap layer if enabled
-    if (document.getElementById('show-heatmap').checked) {
+    console.log('🔥 Checking heatmap layer option...');
+    const showHeatmapCheckbox = document.getElementById('show-heatmap');
+    if (showHeatmapCheckbox && showHeatmapCheckbox.checked) {
+        console.log('✓ Heatmap layer enabled - adding heatmap layer');
         addHeatmapLayer();
+    } else {
+        console.log('ℹ️ Heatmap layer disabled');
     }
 
     // Add markers if enabled
-    if (document.getElementById('show-markers').checked) {
+    console.log('🔍 Checking markers option...');
+    const showMarkersCheckbox = document.getElementById('show-markers');
+    if (showMarkersCheckbox && showMarkersCheckbox.checked) {
+        console.log('✓ Markers enabled - adding markers');
         addMarkers();
+    } else {
+        console.log('ℹ️ Markers disabled');
     }
 
     // Fit map to data bounds if we have data
+    console.log('🎯 Fitting map to data bounds...');
     if (heatmapData.length > 0) {
-        const bounds = L.latLngBounds(heatmapData.map(point => [point.latitude, point.longitude]));
-        map.fitBounds(bounds, { padding: [20, 20] });
+        try {
+            const bounds = new google.maps.LatLngBounds();
+            heatmapData.forEach(point => {
+                bounds.extend({ lat: point.latitude, lng: point.longitude });
+            });
+            map.fitBounds(bounds, { top: 20, left: 20, bottom: 20, right: 20 });
+            console.log('✓ Map fitted to bounds');
+        } catch (error) {
+            console.error('❌ Error fitting bounds:', error);
+        }
     }
+
+    console.log('🗺️ === GOOGLE MAPS VISUALIZATION UPDATE COMPLETED ===');
 }
 
-function addHeatmapLayer() {
-    if (!heatmapData || heatmapData.length === 0) return;
+let heatmapLayer = null;
 
-    // Check if heatLayer plugin is available
-    if (typeof L.heatLayer !== 'function') {
-        console.warn('Leaflet heat layer plugin not available, using circle markers instead');
-        addHeatCircles();
+function addHeatmapLayer() {
+    console.log('🔥 === ADDING GOOGLE MAPS HEATMAP LAYER ===');
+
+    if (!heatmapData || heatmapData.length === 0) {
+        console.log('⚠️ No heatmap data available');
         return;
     }
 
-    const intensity = parseFloat(document.getElementById('intensity-slider').value);
+    console.log('📊 Processing', heatmapData.length, 'data points for Google Maps heatmap');
 
-    // Prepare heatmap data points
-    const heatPoints = heatmapData.map(point => [
-        point.latitude,
-        point.longitude,
-        point.intensity * intensity
-    ]);
+    // Clear existing heatmap layer
+    if (heatmapLayer) {
+        heatmapLayer.setMap(null);
+        heatmapLayer = null;
+    }
+
+    console.log('⚙️ Getting intensity setting...');
+    const intensitySlider = document.getElementById('intensity-slider');
+    const intensity = intensitySlider ? parseFloat(intensitySlider.value) : 1.0;
+    console.log('📊 Intensity setting:', intensity);
+
+    // Prepare heatmap data points for Google Maps
+    console.log('📍 Preparing Google Maps heatmap points...');
+    const heatPoints = heatmapData.map(point => {
+        return {
+            location: new google.maps.LatLng(point.latitude, point.longitude),
+            weight: point.intensity * intensity
+        };
+    });
+    console.log('✓ Prepared', heatPoints.length, 'heat points');
 
     try {
-        // Create heatmap layer
-        heatmapLayer = L.heatLayer(heatPoints, {
-            radius: 25,
-            blur: 15,
-            maxZoom: 18,
-            max: Math.max(...heatmapData.map(p => p.intensity)) * intensity
-        }).addTo(map);
+        console.log('🔥 Creating Google Maps heatmap layer...');
+
+        // Create Google Maps HeatmapLayer using the visualization library
+        heatmapLayer = new google.maps.visualization.HeatmapLayer({
+            data: heatPoints,
+            map: map
+        });
+
+        // Configure heatmap options to match your reference image
+        const maxWeight = Math.max(...heatmapData.map(p => p.intensity)) * intensity;
+
+        heatmapLayer.setOptions({
+            radius: 60,  // Larger radius for smoother blending
+            opacity: 0.7,  // Good visibility while showing map underneath
+            maxIntensity: maxWeight,
+            gradient: [
+                'rgba(0, 255, 0, 0)',       // Transparent (no data)
+                'rgba(0, 255, 0, 0.2)',     // Light green (very low density)
+                'rgba(0, 255, 0, 0.5)',     // Green (low density)
+                'rgba(255, 255, 0, 0.7)',   // Yellow (medium-low density)
+                'rgba(255, 165, 0, 0.8)',   // Orange (medium density)
+                'rgba(255, 69, 0, 0.9)',    // Orange red (high density)
+                'rgba(255, 0, 0, 1)'        // Red (maximum density)
+            ],
+            dissipating: true  // Allow natural heat dissipation
+        });
+
+        console.log('✅ Google Maps heatmap layer added successfully!');
+        console.log('📊 Heatmap configured with', heatPoints.length, 'points, max weight:', maxWeight);
+
     } catch (error) {
-        console.error('Error creating heatmap layer:', error);
+        console.error('❌ Error creating Google Maps heatmap layer:', error);
+        console.error('Stack trace:', error.stack);
+        console.log('🔄 Falling back to circle visualization...');
         addHeatCircles();
     }
+
+    console.log('🔥 === GOOGLE MAPS HEATMAP LAYER ADDITION COMPLETED ===');
 }
 
 function addHeatCircles() {
-    // Fallback: Use circle markers with varying opacity instead of heatmap
+    // True heatmap visualization using overlapping circles with radial gradients
     if (!heatmapData || heatmapData.length === 0) return;
 
     const intensity = parseFloat(document.getElementById('intensity-slider').value);
     const maxIntensity = Math.max(...heatmapData.map(p => p.intensity));
 
+    console.log('🔥 Creating true heatmap visualization with radial gradients...');
+
     heatmapData.forEach(point => {
         const normalizedIntensity = (point.intensity / maxIntensity) * intensity;
-        const radius = Math.min(Math.max(normalizedIntensity * 30, 5), 50);
-        const opacity = Math.min(Math.max(normalizedIntensity, 0.3), 0.8);
+        const baseRadius = 300; // Base radius in meters for heatmap effect
+        const radius = Math.min(Math.max(normalizedIntensity * baseRadius * 1.5, baseRadius * 0.4), baseRadius * 2);
 
-        // Color based on intensity (red for high, yellow for medium, green for low)
-        let color = '#00ff00'; // Green for low
-        if (normalizedIntensity > 0.6) {
-            color = '#ff0000'; // Red for high
-        } else if (normalizedIntensity > 0.3) {
-            color = '#ffaa00'; // Orange for medium
+        // Create heatmap color based on intensity (true heatmap colors)
+        let heatColor, heatIntensity;
+
+        if (normalizedIntensity > 0.8) {
+            heatColor = '#ff0000'; // Pure red for maximum heat
+            heatIntensity = 0.8;
+        } else if (normalizedIntensity > 0.6) {
+            heatColor = '#ff4500'; // Orange red for high heat
+            heatIntensity = 0.7;
+        } else if (normalizedIntensity > 0.4) {
+            heatColor = '#ffa500'; // Orange for medium heat
+            heatIntensity = 0.6;
+        } else if (normalizedIntensity > 0.2) {
+            heatColor = '#ffff00'; // Yellow for low-medium heat
+            heatIntensity = 0.5;
+        } else {
+            heatColor = '#00ff00'; // Green for low heat
+            heatIntensity = 0.4;
         }
 
-        const circle = L.circle([point.latitude, point.longitude], {
-            color: color,
-            fillColor: color,
-            fillOpacity: opacity,
-            radius: radius * 20 // Scale for visibility
+        // Create multiple concentric circles to simulate heatmap gradient
+        const heatCircles = [];
+
+        // Layer 1: Outermost circle (largest, most transparent)
+        heatCircles.push(new google.maps.Circle({
+            strokeColor: 'transparent',
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            fillColor: heatColor,
+            fillOpacity: heatIntensity * 0.1,
+            map: map,
+            center: { lat: point.latitude, lng: point.longitude },
+            radius: radius * 2
+        }));
+
+        // Layer 2: Second circle
+        heatCircles.push(new google.maps.Circle({
+            strokeColor: 'transparent',
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            fillColor: heatColor,
+            fillOpacity: heatIntensity * 0.2,
+            map: map,
+            center: { lat: point.latitude, lng: point.longitude },
+            radius: radius * 1.5
+        }));
+
+        // Layer 3: Third circle
+        heatCircles.push(new google.maps.Circle({
+            strokeColor: 'transparent',
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            fillColor: heatColor,
+            fillOpacity: heatIntensity * 0.4,
+            map: map,
+            center: { lat: point.latitude, lng: point.longitude },
+            radius: radius * 1.2
+        }));
+
+        // Layer 4: Inner circle
+        heatCircles.push(new google.maps.Circle({
+            strokeColor: 'transparent',
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            fillColor: heatColor,
+            fillOpacity: heatIntensity * 0.6,
+            map: map,
+            center: { lat: point.latitude, lng: point.longitude },
+            radius: radius * 0.8
+        }));
+
+        // Layer 5: Core circle (smallest, most intense)
+        heatCircles.push(new google.maps.Circle({
+            strokeColor: 'transparent',
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            fillColor: heatColor,
+            fillOpacity: heatIntensity,
+            map: map,
+            center: { lat: point.latitude, lng: point.longitude },
+            radius: radius * 0.4
+        }));
+
+        // Store heatmap circles for cleanup
+        heatmapCircles.push(...heatCircles);
+
+        // Add click listener to all heat circles for this location
+        heatCircles.forEach(circle => {
+            circle.addListener('click', function() {
+                const infoContent = createPopupContent(point);
+                infoWindow.setContent(`<div class="gm-popup-content">${infoContent}</div>`);
+                infoWindow.setPosition({ lat: point.latitude, lng: point.longitude });
+                infoWindow.open(map);
+
+                // Also show detailed modal
+                showLocationDetails(point.latitude, point.longitude, point.location_name);
+            });
         });
-
-        if (!heatmapLayer) {
-            heatmapLayer = L.layerGroup();
-        }
-        heatmapLayer.addLayer(circle);
     });
 
-    if (heatmapLayer) {
-        heatmapLayer.addTo(map);
-    }
+    console.log('✅ Created true heatmap visualization with', heatmapData.length, 'heat zones');
 }
 
 function addMarkers() {
     if (!heatmapData || heatmapData.length === 0) return;
 
+    console.log('🔍 Adding Google Maps markers...');
+
     heatmapData.forEach(point => {
-        // Create marker icon based on delivery status
+        // Determine marker color based on delivery status
         let markerColor = '#007bff'; // Default blue
         if (point.completion_rate >= 80) {
             markerColor = '#28a745'; // Green for high completion
@@ -708,27 +986,61 @@ function addMarkers() {
             markerColor = '#dc3545'; // Red for low completion
         }
 
-        // Create marker
-        const marker = L.circleMarker([point.latitude, point.longitude], {
-            radius: Math.min(Math.max(point.order_count / 2, 5), 20),
-            fillColor: markerColor,
-            color: 'white',
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.8
-        });
+        // Create modern marker using AdvancedMarkerElement if available, fallback to classic Marker
+        const markerSize = Math.min(Math.max(point.order_count / 2, 8), 25);
+        let marker;
 
-        // Create popup content
-        const popupContent = createPopupContent(point);
-        marker.bindPopup(popupContent);
+        if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
+            // Use modern AdvancedMarkerElement
+            const markerDiv = document.createElement('div');
+            markerDiv.style.width = `${markerSize * 2}px`;
+            markerDiv.style.height = `${markerSize * 2}px`;
+            markerDiv.style.borderRadius = '50%';
+            markerDiv.style.backgroundColor = markerColor;
+            markerDiv.style.border = '2px solid white';
+            markerDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+            markerDiv.style.cursor = 'pointer';
+            markerDiv.title = point.location_name || 'Delivery Location';
 
-        // Add click handler for detailed view
-        marker.on('click', function() {
+            marker = new google.maps.marker.AdvancedMarkerElement({
+                position: { lat: point.latitude, lng: point.longitude },
+                map: map,
+                content: markerDiv,
+                title: point.location_name || 'Delivery Location'
+            });
+        } else {
+            // Fallback to classic Marker
+            marker = new google.maps.Marker({
+                position: { lat: point.latitude, lng: point.longitude },
+                map: map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    fillColor: markerColor,
+                    fillOpacity: 0.8,
+                    strokeColor: 'white',
+                    strokeWeight: 2,
+                    scale: markerSize
+                },
+                title: point.location_name || 'Delivery Location'
+            });
+        }
+
+        // Create info window content
+        const infoContent = createPopupContent(point);
+
+        // Add click listener to show info window
+        marker.addListener('click', function() {
+            infoWindow.setContent(`<div class="gm-popup-content">${infoContent}</div>`);
+            infoWindow.open(map, marker);
+
+            // Also show detailed modal
             showLocationDetails(point.latitude, point.longitude, point.location_name);
         });
 
-        markersLayer.addLayer(marker);
+        locationMarkers.push(marker);
     });
+
+    console.log('✓ Added', locationMarkers.length, 'Google Maps markers');
 }
 
 function createPopupContent(point) {
@@ -925,25 +1237,48 @@ function applyControls() {
 
 function resetMapView() {
     if (map && heatmapData.length > 0) {
-        const bounds = L.latLngBounds(heatmapData.map(point => [point.latitude, point.longitude]));
-        map.fitBounds(bounds, { padding: [20, 20] });
+        const bounds = new google.maps.LatLngBounds();
+        heatmapData.forEach(point => {
+            bounds.extend({ lat: point.latitude, lng: point.longitude });
+        });
+        map.fitBounds(bounds, { top: 20, left: 20, bottom: 20, right: 20 });
     }
 }
 
 function toggleMarkers() {
-    if (document.getElementById('show-markers').checked) {
+    const showMarkers = document.getElementById('show-markers').checked;
+
+    if (showMarkers) {
+        console.log('🔍 Showing location markers...');
         addMarkers();
     } else {
-        markersLayer.clearLayers();
+        console.log('🔍 Hiding location markers...');
+        // Clear all location markers
+        locationMarkers.forEach(marker => {
+            marker.setMap(null);
+        });
+        locationMarkers = [];
     }
 }
 
 function toggleHeatmapLayer() {
-    if (document.getElementById('show-heatmap').checked) {
+    const showHeatmap = document.getElementById('show-heatmap').checked;
+
+    if (showHeatmap) {
+        console.log('🔥 Showing heatmap layer...');
         addHeatmapLayer();
-    } else if (heatmapLayer) {
-        map.removeLayer(heatmapLayer);
-        heatmapLayer = null;
+    } else {
+        console.log('🔥 Hiding heatmap layer...');
+        // Clear heatmap layer
+        if (heatmapLayer) {
+            heatmapLayer.setMap(null);
+            heatmapLayer = null;
+        }
+        // Clear all heatmap circles
+        heatmapCircles.forEach(circle => {
+            circle.setMap(null);
+        });
+        heatmapCircles = [];
     }
 }
 
@@ -965,10 +1300,10 @@ function toggleFullscreen() {
         document.body.style.overflow = 'hidden';
     }
 
-    // Trigger map resize
+    // Trigger Google Maps resize
     setTimeout(() => {
         if (map) {
-            map.invalidateSize();
+            google.maps.event.trigger(map, 'resize');
         }
     }, 100);
 }
@@ -980,11 +1315,41 @@ async function refreshHeatmap() {
 }
 
 function showLoading() {
-    document.getElementById('loading-overlay').style.display = 'flex';
+    console.log('⏳ Showing loading overlay...');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+        // Add a subtle fade-in animation
+        loadingOverlay.style.opacity = '0';
+        setTimeout(() => {
+            if (loadingOverlay.style.display === 'flex') {
+                loadingOverlay.style.opacity = '1';
+            }
+        }, 10);
+        console.log('✅ Loading overlay shown successfully');
+    } else {
+        console.warn('⚠️ Loading overlay element not found');
+    }
 }
 
 function hideLoading() {
-    document.getElementById('loading-overlay').style.display = 'none';
+    console.log('⏳ Hiding loading overlay...');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    if (loadingOverlay) {
+        // Add fade-out animation
+        loadingOverlay.style.opacity = '0';
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+        }, 300);
+        console.log('✅ Loading overlay hidden successfully');
+
+        // Clear force hide timeout since we successfully loaded
+        if (window.clearForceHideTimeout) {
+            window.clearForceHideTimeout();
+        }
+    } else {
+        console.warn('⚠️ Loading overlay element not found');
+    }
 }
 
 function showError(message) {
@@ -1105,5 +1470,34 @@ async function extractCoordinatesForDate(date) {
 
 // Auto-refresh every 5 minutes
 setInterval(refreshHeatmap, 300000);
+</script>
+
+<!-- Load Google Maps API after all our code is defined -->
+<script>
+function loadGoogleMaps() {
+    // Create script element
+    const script = document.createElement('script');
+    script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAjiXkHxr-Cy_AbeNNENquPcjwojBIGh-4&libraries=visualization&callback=initMap';
+    script.async = true;
+    script.defer = true;
+
+    // Handle loading errors
+    script.onerror = function() {
+        console.error('❌ Failed to load Google Maps API');
+        hideLoading();
+        showError('Failed to load Google Maps API. Please check your internet connection and API key.');
+    };
+
+    // Add to head
+    document.head.appendChild(script);
+    console.log('📡 Google Maps API script added to DOM');
+}
+
+// Load Google Maps when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadGoogleMaps);
+} else {
+    loadGoogleMaps();
+}
 </script>
 {% endblock %}

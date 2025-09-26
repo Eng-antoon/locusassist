@@ -31,6 +31,9 @@ class HeatmapService:
         Returns:
             Dict with heatmap data and statistics
         """
+        logger.info(f"🔥 === HEATMAP DATA REQUEST ===")
+        logger.info(f"📅 Date filter: {date}")
+        logger.info(f"📊 Aggregation level: {aggregation_level}")
         try:
             # Start with base query for orders with location data
             query = db.session.query(Order).filter(
@@ -55,7 +58,9 @@ class HeatmapService:
                     }
 
             # Get all orders with location data
+            logger.info(f"📋 Executing database query...")
             orders = query.all()
+            logger.info(f"✓ Query completed. Found {len(orders)} orders with coordinates")
 
             if not orders:
                 # Check if we have orders for this date but without coordinates
@@ -88,7 +93,15 @@ class HeatmapService:
                 heatmap_data = self._aggregate_by_coordinates(orders)  # Default
 
             # Calculate statistics
+            logger.info(f"📊 Calculating statistics...")
             statistics = self._calculate_statistics(orders)
+            logger.info(f"✓ Statistics calculated")
+
+            logger.info(f"✅ HEATMAP DATA GENERATED:")
+            logger.info(f"   - Orders processed: {len(orders)}")
+            logger.info(f"   - Heatmap points: {len(heatmap_data)}")
+            logger.info(f"   - Total orders: {statistics.get('total_orders', 0)}")
+            logger.info(f"   - Unique locations: {statistics.get('unique_locations', 0)}")
 
             return {
                 'success': True,
