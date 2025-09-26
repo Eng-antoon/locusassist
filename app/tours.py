@@ -185,7 +185,7 @@ class TourService:
             logger.error(f"Error updating tour statistics for {tour_id}: {e}")
             db.session.rollback()
 
-    def get_tours(self, date: str = None, page: int = 1, per_page: int = 50,
+    def get_tours(self, date: str = None, date_from: str = None, date_to: str = None, page: int = 1, per_page: int = 50,
                   search: str = None, sort_by: str = 'tour_number',
                   sort_order: str = 'asc', vehicle: str = None,
                   rider: str = None, tour_number: str = None,
@@ -202,8 +202,16 @@ class TourService:
             if needs_join:
                 query = query.join(Order, Tour.tour_id == Order.tour_id)
 
-            # Date filtering
-            if date:
+            # Date filtering - support both single date and date ranges
+            if date_from and date_to:
+                # Date range filtering
+                query = query.filter(Tour.tour_date >= date_from)
+                query = query.filter(Tour.tour_date <= f"{date_to}-23-59-59")  # Include full end date
+            elif date_from:
+                # Single date from date_from
+                query = query.filter(Tour.tour_date.like(f"{date_from}%"))
+            elif date:
+                # Single date (backward compatibility)
                 query = query.filter(Tour.tour_date.like(f"{date}%"))
 
             # Vehicle filtering
@@ -350,6 +358,8 @@ class TourService:
                 'has_prev': page > 1,
                 'filters_applied': {
                     'date': date,
+                    'date_from': date_from,
+                    'date_to': date_to,
                     'search': search,
                     'vehicle': vehicle,
                     'rider': rider,
@@ -370,12 +380,18 @@ class TourService:
                 'total_count': 0
             }
 
-    def get_filter_options(self, date: str = None) -> dict:
+    def get_filter_options(self, date: str = None, date_from: str = None, date_to: str = None) -> dict:
         """Get available filter options for dropdowns"""
         try:
             # Get unique cities from tours delivery_cities (JSON field)
             cities_query = Tour.query
-            if date:
+            # Apply date filtering
+            if date_from and date_to:
+                cities_query = cities_query.filter(Tour.tour_date >= date_from)
+                cities_query = cities_query.filter(Tour.tour_date <= f"{date_to}-23-59-59")
+            elif date_from:
+                cities_query = cities_query.filter(Tour.tour_date.like(f"{date_from}%"))
+            elif date:
                 cities_query = cities_query.filter(Tour.tour_date.like(f"{date}%"))
 
             tours_with_cities = cities_query.filter(Tour.delivery_cities.isnot(None)).all()
@@ -390,21 +406,50 @@ class TourService:
 
             # Get unique riders from tours
             riders_query = Tour.query.filter(Tour.rider_name.isnot(None))
-            if date:
+            if date_from and date_to:
+                riders_query = riders_query.filter(Tour.tour_date >= date_from)
+                riders_query = riders_query.filter(Tour.tour_date <= f"{date_to}-23-59-59")
+            elif date_from:
+                riders_query = riders_query.filter(Tour.tour_date.like(f"{date_from}%"))
+            elif date:
                 riders_query = riders_query.filter(Tour.tour_date.like(f"{date}%"))
             riders = [r[0] for r in riders_query.with_entities(Tour.rider_name).distinct().all() if r[0]]
 
             # Get unique vehicles from tours
             vehicles_query = Tour.query.filter(Tour.vehicle_registration.isnot(None))
-            if date:
+            if date_from and date_to:
+                vehicles_query = vehicles_query.filter(Tour.tour_date >= date_from)
+                vehicles_query = vehicles_query.filter(Tour.tour_date <= f"{date_to}-23-59-59")
+            elif date_from:
+                vehicles_query = vehicles_query.filter(Tour.tour_date.like(f"{date_from}%"))
+            elif date:
                 vehicles_query = vehicles_query.filter(Tour.tour_date.like(f"{date}%"))
             vehicles = [v[0] for v in vehicles_query.with_entities(Tour.vehicle_registration).distinct().all() if v[0]]
 
             # Get unique company owners from orders custom_fields
             companies_query = Order.query.filter(Order.custom_fields.isnot(None))
-            if date:
+            from datetime import datetime, timedelta
+            if date_from and date_to:
+                try:
+                    # Convert orders date range to tour date range for filtering
+                    orders_start = datetime.strptime(date_from, "%Y-%m-%d")
+                    orders_end = datetime.strptime(date_to, "%Y-%m-%d")
+                    tour_start = orders_start - timedelta(days=1)
+                    tour_end = orders_end - timedelta(days=1)
+                    companies_query = companies_query.filter(Order.tour_date >= tour_start.strftime("%Y-%m-%d"))
+                    companies_query = companies_query.filter(Order.tour_date <= f"{tour_end.strftime('%Y-%m-%d')}-23-59-59")
+                except ValueError:
+                    pass
+            elif date_from:
+                try:
+                    orders_date = datetime.strptime(date_from, "%Y-%m-%d")
+                    tour_date = orders_date - timedelta(days=1)
+                    tour_date_str = tour_date.strftime("%Y-%m-%d")
+                    companies_query = companies_query.filter(Order.tour_date.like(f"{tour_date_str}%"))
+                except ValueError:
+                    pass
+            elif date:
                 # Convert orders date to tour date for filtering
-                from datetime import datetime, timedelta
                 try:
                     orders_date = datetime.strptime(date, "%Y-%m-%d")
                     tour_date = orders_date - timedelta(days=1)
@@ -484,12 +529,18 @@ class TourService:
                 'orders': []
             }
 
-    def get_tour_summary_stats(self, date: str = None) -> dict:
+    def get_tour_summary_stats(self, date: str = None, date_from: str = None, date_to: str = None) -> dict:
         """Get summary statistics for all tours on a given date"""
         try:
             query = Tour.query
 
-            if date:
+            # Apply date filtering
+            if date_from and date_to:
+                query = query.filter(Tour.tour_date >= date_from)
+                query = query.filter(Tour.tour_date <= f"{date_to}-23-59-59")
+            elif date_from:
+                query = query.filter(Tour.tour_date.like(f"{date_from}%"))
+            elif date:
                 query = query.filter(Tour.tour_date.like(f"{date}%"))
 
             tours = query.all()

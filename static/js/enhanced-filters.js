@@ -1221,12 +1221,19 @@ class EnhancedFilters {
             const dateTo = document.getElementById('filter-date-to')?.value;
             const selectedDate = document.getElementById('filter-date')?.value;
 
-            // Determine what date to save for tours (prioritize single date over range)
-            let dateForTours = selectedDate || dateFrom || new Date().toISOString().split('T')[0];
-            localStorage.setItem('selectedDate', dateForTours);
+            // Save date range parameters for navigation
+            if (dateFrom && dateTo) {
+                localStorage.setItem('selectedDateFrom', dateFrom);
+                localStorage.setItem('selectedDateTo', dateTo);
+                localStorage.setItem('selectedDate', dateFrom); // Fallback for single date
+            } else if (selectedDate) {
+                localStorage.setItem('selectedDate', selectedDate);
+                localStorage.removeItem('selectedDateFrom');
+                localStorage.removeItem('selectedDateTo');
+            }
 
             console.log('State saved to localStorage:', state);
-            console.log('Selected date saved for tours:', dateForTours);
+            console.log('Date parameters saved:', { dateFrom, dateTo, selectedDate });
         } catch (error) {
             console.error('Error saving state to localStorage:', error);
         }

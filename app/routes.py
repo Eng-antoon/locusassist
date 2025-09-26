@@ -1609,28 +1609,69 @@ def register_routes(app, config):
         from datetime import datetime, timedelta
         from models import Tour
 
-        # Get the date parameter - could be orders date or tour date
+        # Get filter parameters with date range support
+        today = datetime.now().strftime("%Y-%m-%d")
         selected_date = request.args.get('date')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        day_filter = request.args.get('day_filter')  # Optional day within range
 
-        if selected_date:
+        # Handle day filter within range
+        if day_filter and date_from and date_to:
+            # Validate that day_filter is within the range
+            try:
+                day_obj = datetime.strptime(day_filter, "%Y-%m-%d").date()
+                start_obj = datetime.strptime(date_from, "%Y-%m-%d").date()
+                end_obj = datetime.strptime(date_to, "%Y-%m-%d").date()
+
+                if start_obj <= day_obj <= end_obj:
+                    # Filter to specific day within range
+                    selected_date = day_filter
+                    date_display = f"{day_filter} (from {date_from} to {date_to})"
+                else:
+                    # Day filter is outside range, use full range
+                    selected_date = date_from
+                    date_display = f"{date_from} to {date_to}"
+            except ValueError:
+                selected_date = date_from
+                date_display = f"{date_from} to {date_to}"
+        elif date_from and date_to:
+            # Date range without day filter
+            date_display = f"{date_from} to {date_to}" if date_from != date_to else date_from
+            selected_date = date_from  # Use start date as selected date
+        elif date_from:
+            selected_date = date_from
+            date_display = date_from
+        elif selected_date:
             # If date is provided, assume it's an orders date and convert to tour date
             # (tours are created 1 day before orders)
-            orders_date = datetime.strptime(selected_date, "%Y-%m-%d")
-            tour_date = orders_date - timedelta(days=1)
-            selected_date = tour_date.strftime("%Y-%m-%d")
+            try:
+                orders_date = datetime.strptime(selected_date, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                selected_date = tour_date.strftime("%Y-%m-%d")
+                date_display = selected_date
+            except ValueError:
+                selected_date = today
+                date_display = selected_date
         else:
             # Find the most recent tour date
             latest_tour = Tour.query.order_by(Tour.tour_date.desc()).first()
             if latest_tour and latest_tour.tour_date:
                 # Extract date from tour_date (format: 2025-09-24-20-11-06)
                 selected_date = latest_tour.tour_date[:10]
+                date_display = selected_date
             else:
                 # Fallback to yesterday (tours are usually planned the day before)
                 yesterday = datetime.now() - timedelta(days=1)
                 selected_date = yesterday.strftime("%Y-%m-%d")
+                date_display = selected_date
 
         return render_template('tours.html',
                              selected_date=selected_date,
+                             date_from=date_from,
+                             date_to=date_to,
+                             day_filter=day_filter,
+                             date_display=date_display,
                              username='Amin')
 
     @app.route('/tour/<tour_id>')
@@ -1660,12 +1701,34 @@ def register_routes(app, config):
         from app.tours import tour_service
         from datetime import datetime, timedelta
 
-        # Get query parameters
+        # Get query parameters - support date ranges
         date = request.args.get('date')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
 
         # Convert orders date to tour date if provided
         # Tours are created 1 day before the orders they contain
-        if date:
+        if date_from and date_to:
+            try:
+                orders_start = datetime.strptime(date_from, "%Y-%m-%d")
+                orders_end = datetime.strptime(date_to, "%Y-%m-%d")
+                tour_start = orders_start - timedelta(days=1)
+                tour_end = orders_end - timedelta(days=1)
+                date_from = tour_start.strftime("%Y-%m-%d")
+                date_to = tour_end.strftime("%Y-%m-%d")
+                date = None  # Clear single date when using range
+            except ValueError:
+                # If date format is invalid, keep original
+                pass
+        elif date_from:
+            try:
+                orders_date = datetime.strptime(date_from, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                date_from = tour_date.strftime("%Y-%m-%d")
+                date = None  # Clear single date when using date_from
+            except ValueError:
+                pass
+        elif date:
             try:
                 orders_date = datetime.strptime(date, "%Y-%m-%d")
                 tour_date = orders_date - timedelta(days=1)
@@ -1689,10 +1752,28 @@ def register_routes(app, config):
         tour_status = request.args.get('tour_status', '').strip()
         company_owner = request.args.get('company_owner', '').strip()
         order_status_filter = request.args.get('order_status_filter', '').strip()
+        day_filter = request.args.get('day_filter')
+
+        # Handle day filter - if specified, filter to single day within range
+        if day_filter and date_from and date_to:
+            try:
+                day_obj = datetime.strptime(day_filter, "%Y-%m-%d").date()
+                start_obj = datetime.strptime(date_from, "%Y-%m-%d").date()
+                end_obj = datetime.strptime(date_to, "%Y-%m-%d").date()
+
+                if start_obj <= day_obj <= end_obj:
+                    # Use day filter as single date
+                    date = day_filter
+                    date_from = None
+                    date_to = None
+            except ValueError:
+                pass  # Keep original range
 
         # Get tours with advanced filtering
         result = tour_service.get_tours(
             date=date,
+            date_from=date_from,
+            date_to=date_to,
             page=page,
             per_page=per_page,
             search=search,
@@ -1707,7 +1788,12 @@ def register_routes(app, config):
             order_status_filter=order_status_filter if order_status_filter else None
         )
 
-        return jsonify(result)
+        response = make_response(jsonify(result))
+        # Add cache-busting headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
     @app.route('/api/tours/filter-options')
     def api_tours_filter_options():
@@ -1716,9 +1802,30 @@ def register_routes(app, config):
         from datetime import datetime, timedelta
 
         date = request.args.get('date')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
 
         # Convert orders date to tour date if provided
-        if date:
+        if date_from and date_to:
+            try:
+                orders_start = datetime.strptime(date_from, "%Y-%m-%d")
+                orders_end = datetime.strptime(date_to, "%Y-%m-%d")
+                tour_start = orders_start - timedelta(days=1)
+                tour_end = orders_end - timedelta(days=1)
+                date_from = tour_start.strftime("%Y-%m-%d")
+                date_to = tour_end.strftime("%Y-%m-%d")
+                date = None
+            except ValueError:
+                pass
+        elif date_from:
+            try:
+                orders_date = datetime.strptime(date_from, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                date_from = tour_date.strftime("%Y-%m-%d")
+                date = None
+            except ValueError:
+                pass
+        elif date:
             try:
                 orders_date = datetime.strptime(date, "%Y-%m-%d")
                 tour_date = orders_date - timedelta(days=1)
@@ -1727,8 +1834,13 @@ def register_routes(app, config):
                 # If date format is invalid, keep original
                 pass
 
-        result = tour_service.get_filter_options(date=date)
-        return jsonify(result)
+        result = tour_service.get_filter_options(date=date, date_from=date_from, date_to=date_to)
+        response = make_response(jsonify(result))
+        # Add cache-busting headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
     @app.route('/api/tours/summary')
     def api_tours_summary():
@@ -1737,10 +1849,31 @@ def register_routes(app, config):
         from datetime import datetime, timedelta
 
         date = request.args.get('date')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
 
         # Convert orders date to tour date if provided
         # Tours are created 1 day before the orders they contain
-        if date:
+        if date_from and date_to:
+            try:
+                orders_start = datetime.strptime(date_from, "%Y-%m-%d")
+                orders_end = datetime.strptime(date_to, "%Y-%m-%d")
+                tour_start = orders_start - timedelta(days=1)
+                tour_end = orders_end - timedelta(days=1)
+                date_from = tour_start.strftime("%Y-%m-%d")
+                date_to = tour_end.strftime("%Y-%m-%d")
+                date = None
+            except ValueError:
+                pass
+        elif date_from:
+            try:
+                orders_date = datetime.strptime(date_from, "%Y-%m-%d")
+                tour_date = orders_date - timedelta(days=1)
+                date_from = tour_date.strftime("%Y-%m-%d")
+                date = None
+            except ValueError:
+                pass
+        elif date:
             try:
                 orders_date = datetime.strptime(date, "%Y-%m-%d")
                 tour_date = orders_date - timedelta(days=1)
@@ -1749,9 +1882,14 @@ def register_routes(app, config):
                 # If date format is invalid, keep original
                 pass
 
-        result = tour_service.get_tour_summary_stats(date=date)
+        result = tour_service.get_tour_summary_stats(date=date, date_from=date_from, date_to=date_to)
 
-        return jsonify(result)
+        response = make_response(jsonify(result))
+        # Add cache-busting headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
     @app.route('/api/tours/refresh', methods=['POST'])
     def api_refresh_tours():
@@ -1800,11 +1938,48 @@ def register_routes(app, config):
         """Heatmap dashboard page"""
         from datetime import datetime
 
-        # Get today's date as default
+        # Get filter parameters with date range support
         today = datetime.now().strftime("%Y-%m-%d")
         selected_date = request.args.get('date', today)
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        day_filter = request.args.get('day_filter')  # Optional day within range
 
-        return render_template('heatmap.html', selected_date=selected_date)
+        # Handle day filter within range
+        if day_filter and date_from and date_to:
+            # Validate that day_filter is within the range
+            try:
+                day_obj = datetime.strptime(day_filter, "%Y-%m-%d").date()
+                start_obj = datetime.strptime(date_from, "%Y-%m-%d").date()
+                end_obj = datetime.strptime(date_to, "%Y-%m-%d").date()
+
+                if start_obj <= day_obj <= end_obj:
+                    # Filter to specific day within range
+                    selected_date = day_filter
+                    date_display = f"{day_filter} (from {date_from} to {date_to})"
+                else:
+                    # Day filter is outside range, use full range
+                    selected_date = date_from
+                    date_display = f"{date_from} to {date_to}"
+            except ValueError:
+                selected_date = date_from
+                date_display = f"{date_from} to {date_to}"
+        elif date_from and date_to:
+            # Date range without day filter
+            date_display = f"{date_from} to {date_to}" if date_from != date_to else date_from
+            selected_date = date_from  # Use start date as selected date
+        elif date_from:
+            selected_date = date_from
+            date_display = date_from
+        else:
+            date_display = selected_date
+
+        return render_template('heatmap.html',
+                             selected_date=selected_date,
+                             date_from=date_from,
+                             date_to=date_to,
+                             day_filter=day_filter,
+                             date_display=date_display)
 
     @app.route('/api/heatmap')
     def api_heatmap_data():
@@ -1812,14 +1987,40 @@ def register_routes(app, config):
         from app.heatmap import heatmap_service
 
         date = request.args.get('date')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        day_filter = request.args.get('day_filter')
         aggregation_level = request.args.get('aggregation_level', 'area')
+
+        # Handle day filter - if specified, filter to single day within range
+        if day_filter and date_from and date_to:
+            try:
+                from datetime import datetime
+                day_obj = datetime.strptime(day_filter, "%Y-%m-%d").date()
+                start_obj = datetime.strptime(date_from, "%Y-%m-%d").date()
+                end_obj = datetime.strptime(date_to, "%Y-%m-%d").date()
+
+                if start_obj <= day_obj <= end_obj:
+                    # Use day filter as single date
+                    date = day_filter
+                    date_from = None
+                    date_to = None
+            except ValueError:
+                pass  # Keep original range
 
         result = heatmap_service.get_delivery_heatmap_data(
             date=date,
+            date_from=date_from,
+            date_to=date_to,
             aggregation_level=aggregation_level
         )
 
-        return jsonify(result)
+        response = make_response(jsonify(result))
+        # Add cache-busting headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
     @app.route('/api/heatmap/location-details')
     def api_heatmap_location_details():

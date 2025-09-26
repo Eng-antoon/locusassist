@@ -37,17 +37,17 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'dashboard' }}" href="{{ url_for('dashboard') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'dashboard' }}" href="#" onclick="navigateWithParams('dashboard')">
                             <i class="fas fa-tachometer-alt me-1"></i>Orders
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'tours_dashboard' }}" href="{{ url_for('tours_dashboard') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'tours_dashboard' }}" href="#" onclick="navigateWithParams('tours')">
                             <i class="fas fa-route me-1"></i>Tours
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ 'active' if request.endpoint == 'heatmap_dashboard' }}" href="{{ url_for('heatmap_dashboard') }}">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'heatmap_dashboard' }}" href="#" onclick="navigateWithParams('heatmap')">
                             <i class="fas fa-map-marked-alt me-1"></i>Heatmap
                         </a>
                     </li>
@@ -83,6 +83,86 @@
     <!-- Select2 for searchable dropdowns -->
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+    <script>
+    // Navigation function to preserve URL parameters and detect date ranges
+    function navigateWithParams(page) {
+        const currentParams = new URLSearchParams(window.location.search);
+        let targetUrl;
+
+        switch(page) {
+            case 'dashboard':
+                targetUrl = '/dashboard';
+                break;
+            case 'tours':
+                targetUrl = '/tours';
+                break;
+            case 'heatmap':
+                targetUrl = '/heatmap';
+                break;
+            default:
+                return;
+        }
+
+        // Enhanced parameter detection - check current URL first
+        let finalParams = new URLSearchParams();
+
+        // For dashboard/orders page, navigate cleanly without any parameters to avoid errors
+        if (page === 'dashboard') {
+            // Dashboard navigation is always clean - no parameters
+            window.location.href = targetUrl;
+            return;
+        }
+
+        // For Tours and Heatmap, preserve date range parameters
+        // If we have date range parameters in current URL, use them
+        if (currentParams.has('date_from') && currentParams.has('date_to')) {
+            finalParams.set('date_from', currentParams.get('date_from'));
+            finalParams.set('date_to', currentParams.get('date_to'));
+            if (currentParams.has('day_filter')) {
+                finalParams.set('day_filter', currentParams.get('day_filter'));
+            }
+        }
+        // If not, check localStorage for orders page date range
+        else {
+            const dateFrom = localStorage.getItem('selectedDateFrom');
+            const dateTo = localStorage.getItem('selectedDateTo');
+            const dayFilter = localStorage.getItem('selectedDayFilter');
+
+            if (dateFrom && dateTo) {
+                finalParams.set('date_from', dateFrom);
+                finalParams.set('date_to', dateTo);
+                if (dayFilter) {
+                    finalParams.set('day_filter', dayFilter);
+                }
+            }
+            // Fallback to single date if available
+            else {
+                const selectedDate = localStorage.getItem('selectedDate');
+                if (selectedDate && selectedDate !== 'null' && selectedDate !== '') {
+                    finalParams.set('date', selectedDate);
+                }
+            }
+        }
+
+        // Preserve other important parameters
+        const preserveParams = ['search', 'status', 'city', 'rider', 'vehicle', 'company_owner', 'tour_status', 'tour_number'];
+        preserveParams.forEach(param => {
+            if (currentParams.has(param)) {
+                finalParams.set(param, currentParams.get(param));
+            }
+        });
+
+        // Build final URL
+        if (finalParams.toString()) {
+            targetUrl += '?' + finalParams.toString();
+        }
+
+        console.log('Navigating to:', targetUrl);
+        window.location.href = targetUrl;
+    }
+    </script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -20,12 +20,14 @@ class HeatmapService:
     def __init__(self):
         pass
 
-    def get_delivery_heatmap_data(self, date: str = None, aggregation_level: str = 'coordinate') -> dict:
+    def get_delivery_heatmap_data(self, date: str = None, date_from: str = None, date_to: str = None, aggregation_level: str = 'coordinate') -> dict:
         """
         Get delivery heatmap data aggregated by location
 
         Args:
-            date: Filter by specific date (YYYY-MM-DD format)
+            date: Filter by specific date (YYYY-MM-DD format) - for backward compatibility
+            date_from: Start date for date range filtering (YYYY-MM-DD format)
+            date_to: End date for date range filtering (YYYY-MM-DD format)
             aggregation_level: 'coordinate' for exact coordinates, 'area' for location names, 'city' for cities
 
         Returns:
@@ -33,6 +35,7 @@ class HeatmapService:
         """
         logger.info(f"🔥 === HEATMAP DATA REQUEST ===")
         logger.info(f"📅 Date filter: {date}")
+        logger.info(f"📅 Date range: {date_from} to {date_to}")
         logger.info(f"📊 Aggregation level: {aggregation_level}")
         try:
             # Start with base query for orders with location data
@@ -43,11 +46,40 @@ class HeatmapService:
                 )
             )
 
-            # Apply date filtering if provided
-            if date:
+            # Apply date filtering if provided - support date ranges
+            if date_from and date_to:
+                try:
+                    start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+                    query = query.filter(Order.date >= start_date)
+                    query = query.filter(Order.date <= end_date)
+                    logger.info(f"📅 Applied date range filter: {start_date} to {end_date}")
+                except ValueError:
+                    logger.error(f"Invalid date format in range: {date_from} to {date_to}")
+                    return {
+                        'success': False,
+                        'error': 'Invalid date format. Please use YYYY-MM-DD.',
+                        'heatmap_data': [],
+                        'statistics': {}
+                    }
+            elif date_from:
+                try:
+                    date_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    query = query.filter(Order.date == date_obj)
+                    logger.info(f"📅 Applied single date filter from date_from: {date_obj}")
+                except ValueError:
+                    logger.error(f"Invalid date format: {date_from}")
+                    return {
+                        'success': False,
+                        'error': 'Invalid date format. Please use YYYY-MM-DD.',
+                        'heatmap_data': [],
+                        'statistics': {}
+                    }
+            elif date:
                 try:
                     date_obj = datetime.strptime(date, '%Y-%m-%d').date()
                     query = query.filter(Order.date == date_obj)
+                    logger.info(f"📅 Applied single date filter: {date_obj}")
                 except ValueError:
                     logger.error(f"Invalid date format: {date}")
                     return {
@@ -63,8 +95,36 @@ class HeatmapService:
             logger.info(f"✓ Query completed. Found {len(orders)} orders with coordinates")
 
             if not orders:
-                # Check if we have orders for this date but without coordinates
-                orders_without_coords = db.session.query(Order).filter(Order.date == date_obj).count()
+                # Check if we have orders for this date range but without coordinates
+                orders_without_coords = 0
+                if date_from and date_to:
+                    try:
+                        start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+                        end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+                        orders_without_coords = db.session.query(Order).filter(Order.date >= start_date, Order.date <= end_date).count()
+                    except ValueError:
+                        pass
+                elif date_from:
+                    try:
+                        date_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                        orders_without_coords = db.session.query(Order).filter(Order.date == date_obj).count()
+                    except ValueError:
+                        pass
+                elif date:
+                    try:
+                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                        orders_without_coords = db.session.query(Order).filter(Order.date == date_obj).count()
+                    except ValueError:
+                        pass
+
+                # Determine date display for response
+                date_display = None
+                if date_from and date_to:
+                    date_display = f"{date_from} to {date_to}" if date_from != date_to else date_from
+                elif date_from:
+                    date_display = date_from
+                elif date:
+                    date_display = date
 
                 return {
                     'success': True,
@@ -77,7 +137,9 @@ class HeatmapService:
                         'completion_rate': 0.0
                     },
                     'aggregation_level': aggregation_level,
-                    'date_filter': date,
+                    'date_filter': date_display,
+                    'date_from': date_from,
+                    'date_to': date_to,
                     'orders_without_coordinates': orders_without_coords,
                     'needs_coordinate_extraction': orders_without_coords > 0
                 }
@@ -103,12 +165,23 @@ class HeatmapService:
             logger.info(f"   - Total orders: {statistics.get('total_orders', 0)}")
             logger.info(f"   - Unique locations: {statistics.get('unique_locations', 0)}")
 
+            # Determine date display for response
+            date_display = None
+            if date_from and date_to:
+                date_display = f"{date_from} to {date_to}" if date_from != date_to else date_from
+            elif date_from:
+                date_display = date_from
+            elif date:
+                date_display = date
+
             return {
                 'success': True,
                 'heatmap_data': heatmap_data,
                 'statistics': statistics,
                 'aggregation_level': aggregation_level,
-                'date_filter': date
+                'date_filter': date_display,
+                'date_from': date_from,
+                'date_to': date_to
             }
 
         except Exception as e:

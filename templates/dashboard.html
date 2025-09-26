@@ -416,8 +416,8 @@
                     {% endif %}
 
                     <!-- Enhanced Tour Details -->
-                    {% if order.orderMetadata.tourDetail %}
-                        {% set tour = order.orderMetadata.tourDetail %}
+                    {% if order.get('orderMetadata', {}).get('tourDetail') %}
+                        {% set tour = order['orderMetadata']['tourDetail'] %}
                         <div class="order-meta-section">
                             <h6><i class="fas fa-truck"></i>Delivery Info</h6>
                             <div class="order-info-grid">
@@ -434,20 +434,20 @@
                     {% endif %}
 
                     <!-- Enhanced Line Items Summary -->
-                    {% if order.orderMetadata.lineItems %}
+                    {% if order.get('orderMetadata', {}).get('lineItems') %}
                         <div class="order-meta-section">
-                            <h6><i class="fas fa-list"></i>Items ({{ order.orderMetadata.lineItems|length }})</h6>
+                            <h6><i class="fas fa-list"></i>Items ({{ order['orderMetadata']['lineItems']|length }})</h6>
                             <div class="items-preview">
                                 <div class="items-list">
-                                    {% for item in order.orderMetadata.lineItems[:3] %}
+                                    {% for item in order['orderMetadata']['lineItems'][:3] %}
                                         <div class="item-row">
                                             <span class="item-name">{{ item.id }}</span>
                                             <span class="item-quantity">{{ item.transactionStatus.transactedQuantity }}x</span>
                                         </div>
                                     {% endfor %}
-                                    {% if order.orderMetadata.lineItems|length > 3 %}
+                                    {% if order['orderMetadata']['lineItems']|length > 3 %}
                                         <div class="text-center mt-2">
-                                            <small class="text-muted">+ {{ order.orderMetadata.lineItems|length - 3 }} more items</small>
+                                            <small class="text-muted">+ {{ order['orderMetadata']['lineItems']|length - 3 }} more items</small>
                                         </div>
                                     {% endif %}
                                 </div>
@@ -518,12 +518,12 @@
                     {% endif %}
 
                     <!-- Enhanced Time Info -->
-                    {% if order.orderMetadata.homebaseCompleteOn %}
+                    {% if order.get('orderMetadata', {}).get('homebaseCompleteOn') %}
                         <div class="order-meta-section">
                             <small class="text-muted d-flex align-items-center gap-2">
                                 <i class="fas fa-clock"></i>
-                                Completed: {{ order.orderMetadata.homebaseCompleteOn.split('T')[0] }}
-                                {{ order.orderMetadata.homebaseCompleteOn.split('T')[1].split('.')[0] }}
+                                Completed: {{ order['orderMetadata']['homebaseCompleteOn'].split('T')[0] }}
+                                {{ order['orderMetadata']['homebaseCompleteOn'].split('T')[1].split('.')[0] }}
                             </small>
                         </div>
                     {% endif %}

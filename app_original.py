@@ -2523,4 +2523,14 @@ if __name__ == '__main__':
     if not init_db_connection():
         print("Warning: Database initialization failed. Some features may not work correctly.")
 
+    # Register additional routes (Tours and Heatmap)
+    try:
+        from app.routes import register_routes
+        from app.config import DevelopmentConfig
+        config = DevelopmentConfig()
+        register_routes(app, config)
+        print("Successfully registered Tours and Heatmap routes")
+    except Exception as e:
+        print(f"Warning: Could not register additional routes: {e}")
+
     app.run(debug=True, host='0.0.0.0', port=8080)

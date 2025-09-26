@@ -69,17 +69,31 @@
                                 <i class="fas fa-search me-2"></i>Search & Info
                             </h6>
 
-                            <!-- Date Display (Read-only) -->
+                            <!-- Date Filter (Conditional Edit) -->
                             <div class="mb-3">
-                                <label class="form-label">Date (from Orders Page)</label>
+                                <label class="form-label">Date Filter</label>
                                 <div class="input-group">
-                                    <input type="text" class="form-control" id="display-date" readonly
-                                           value="{{ selected_date }}" style="background-color: #f8f9fa;">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-lock text-muted" title="Date follows Orders page selection"></i>
-                                    </span>
+                                    {% if date_from and date_to %}
+                                        <input type="date" class="form-control" id="date-filter"
+                                               value="{{ day_filter or date_from }}"
+                                               min="{{ date_from }}" max="{{ date_to }}"
+                                               onchange="updateDateFilter(this.value)">
+                                        <span class="input-group-text" title="Range: {{ date_from }} to {{ date_to }}">
+                                            <i class="fas fa-calendar-alt text-primary"></i>
+                                        </span>
+                                    {% else %}
+                                        <input type="text" class="form-control" id="display-date" readonly
+                                               value="{{ date_display or selected_date }}" style="background-color: #f8f9fa;">
+                                        <span class="input-group-text">
+                                            <i class="fas fa-lock text-muted" title="Date follows Orders page selection"></i>
+                                        </span>
+                                    {% endif %}
                                 </div>
-                                <small class="text-muted">Date automatically follows your Orders page selection</small>
+                                {% if date_from and date_to %}
+                                    <small class="text-muted">Select day from range: {{ date_from }} to {{ date_to }}</small>
+                                {% else %}
+                                    <small class="text-muted">Date automatically follows your Orders page selection</small>
+                                {% endif %}
                             </div>
 
                             <!-- General Search -->
@@ -306,6 +320,9 @@
 let currentPage = 1;
 let currentFilters = {
     date: '{{ selected_date }}', // Initialize with server date, will be updated
+    date_from: '{{ date_from or "" }}', // Date range start
+    date_to: '{{ date_to or "" }}', // Date range end
+    day_filter: '{{ day_filter or "" }}', // Optional day within range
     search: '',
     vehicle: '',
     rider: '',
@@ -398,7 +415,13 @@ async function autoRefreshTourData() {
         showAutoRefreshStatus('Updating tours...');
 
         const params = new URLSearchParams();
-        if (currentFilters.date) {
+        if (currentFilters.date_from && currentFilters.date_to) {
+            params.append('date_from', currentFilters.date_from);
+            params.append('date_to', currentFilters.date_to);
+            if (currentFilters.day_filter) {
+                params.append('day_filter', currentFilters.day_filter);
+            }
+        } else if (currentFilters.date) {
             params.append('date', currentFilters.date);
         }
 
@@ -458,6 +481,23 @@ function showAutoRefreshStatus(message, type = 'info') {
 // Hide auto-refresh status indicator
 function hideAutoRefreshStatus() {
     updateLastUpdatedTime();
+}
+
+// Update day filter when date is changed
+function updateDateFilter(selectedDate) {
+    currentFilters.day_filter = selectedDate;
+
+    // Save to localStorage for navigation
+    localStorage.setItem('selectedDayFilter', selectedDate);
+
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.set('day_filter', selectedDate);
+    history.replaceState(null, '', url);
+
+    // Reload data
+    loadTours();
+    loadTourSummary();
 }
 
 function initializeFiltersPanel() {
@@ -578,7 +618,14 @@ async function loadTours() {
             sort_order: currentFilters.sort_order
         });
 
-        if (currentFilters.date) {
+        // Handle date parameters - prioritize date range over single date
+        if (currentFilters.date_from && currentFilters.date_to) {
+            params.append('date_from', currentFilters.date_from);
+            params.append('date_to', currentFilters.date_to);
+            if (currentFilters.day_filter) {
+                params.append('day_filter', currentFilters.day_filter);
+            }
+        } else if (currentFilters.date) {
             params.append('date', currentFilters.date);
         }
         if (currentFilters.search) {
@@ -637,7 +684,13 @@ async function loadTours() {
 async function loadTourSummary() {
     try {
         const params = new URLSearchParams();
-        if (currentFilters.date) {
+        if (currentFilters.date_from && currentFilters.date_to) {
+            params.append('date_from', currentFilters.date_from);
+            params.append('date_to', currentFilters.date_to);
+            if (currentFilters.day_filter) {
+                params.append('day_filter', currentFilters.day_filter);
+            }
+        } else if (currentFilters.date) {
             params.append('date', currentFilters.date);
         }
 
@@ -1000,7 +1053,13 @@ async function refreshTourData() {
         button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Refreshing...';
 
         const params = new URLSearchParams();
-        if (currentFilters.date) {
+        if (currentFilters.date_from && currentFilters.date_to) {
+            params.append('date_from', currentFilters.date_from);
+            params.append('date_to', currentFilters.date_to);
+            if (currentFilters.day_filter) {
+                params.append('day_filter', currentFilters.day_filter);
+            }
+        } else if (currentFilters.date) {
             params.append('date', currentFilters.date);
         }
 
@@ -1412,7 +1471,13 @@ function filterSelectOptions(select, dropdown, searchTerm) {
 async function loadFilterOptions() {
     try {
         const params = new URLSearchParams();
-        if (currentFilters.date) {
+        if (currentFilters.date_from && currentFilters.date_to) {
+            params.append('date_from', currentFilters.date_from);
+            params.append('date_to', currentFilters.date_to);
+            if (currentFilters.day_filter) {
+                params.append('day_filter', currentFilters.day_filter);
+            }
+        } else if (currentFilters.date) {
             params.append('date', currentFilters.date);
         }
 
