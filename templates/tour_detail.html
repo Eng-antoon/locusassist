@@ -36,6 +36,10 @@
                     <i class="fas fa-arrow-left"></i>
                     Back
                 </button>
+                <button class="btn btn-primary" id="edit-tour-btn" onclick="toggleTourEdit()">
+                    <i class="fas fa-edit"></i>
+                    Edit Tour
+                </button>
             </div>
         </div>
     </div>
@@ -77,26 +81,42 @@
                             <div class="info-value">#{{ tour.tour_number }}</div>
                         </div>
                     </div>
-                    {% if tour.rider_name %}
                     <div class="col-md-6">
                         <div class="info-group">
-                            <label class="info-label">Rider</label>
-                            <div class="info-value">
-                                <i class="fas fa-user me-2"></i>{{ tour.rider_name }}
+                            <label class="info-label">Rider Name</label>
+                            <div class="info-value editable-field" data-field="rider_name">
+                                <span class="display-value">
+                                    <i class="fas fa-user me-2"></i>{{ tour.rider_name or 'Not assigned' }}
+                                </span>
+                                <input type="text" class="form-control edit-input d-none"
+                                       value="{{ tour.rider_name or '' }}" data-original="{{ tour.rider_name or '' }}">
                             </div>
                         </div>
                     </div>
-                    {% endif %}
-                    {% if tour.vehicle_registration %}
                     <div class="col-md-6">
                         <div class="info-group">
-                            <label class="info-label">Vehicle</label>
-                            <div class="info-value">
-                                <i class="fas fa-truck me-2"></i>{{ tour.vehicle_registration }}
+                            <label class="info-label">Vehicle Registration</label>
+                            <div class="info-value editable-field" data-field="vehicle_registration">
+                                <span class="display-value">
+                                    <i class="fas fa-truck me-2"></i>{{ tour.vehicle_registration or 'Not assigned' }}
+                                </span>
+                                <input type="text" class="form-control edit-input d-none"
+                                       value="{{ tour.vehicle_registration or '' }}" data-original="{{ tour.vehicle_registration or '' }}">
                             </div>
                         </div>
                     </div>
-                    {% endif %}
+                    <div class="col-md-6">
+                        <div class="info-group">
+                            <label class="info-label">Vehicle ID</label>
+                            <div class="info-value editable-field" data-field="vehicle_id">
+                                <span class="display-value">
+                                    <i class="fas fa-id-card me-2"></i>{{ tour.vehicle_id or 'Not assigned' }}
+                                </span>
+                                <input type="text" class="form-control edit-input d-none"
+                                       value="{{ tour.vehicle_id or '' }}" data-original="{{ tour.vehicle_id or '' }}">
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {% if tour.delivery_cities or tour.delivery_areas %}
@@ -126,6 +146,24 @@
                     </div>
                 </div>
                 {% endif %}
+
+                <!-- Edit Actions (hidden by default) -->
+                <div class="edit-actions d-none mt-4 pt-3 border-top">
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success" onclick="saveTourChanges()">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button class="btn btn-secondary" onclick="cancelTourEdit()">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <div class="form-check ms-3 d-flex align-items-center">
+                            <input class="form-check-input" type="checkbox" id="propagateToOrders" checked>
+                            <label class="form-check-label ms-2" for="propagateToOrders">
+                                Update linked orders
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -354,6 +392,168 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInput.addEventListener('input', filterOrders);
     }
 });
+
+// Tour editing functionality
+let isEditingTour = false;
+
+function toggleTourEdit() {
+    isEditingTour = !isEditingTour;
+    const editBtn = document.getElementById('edit-tour-btn');
+    const editActions = document.querySelector('.edit-actions');
+    const editableFields = document.querySelectorAll('.editable-field');
+
+    if (isEditingTour) {
+        // Enter edit mode
+        editBtn.innerHTML = '<i class="fas fa-times"></i> Cancel Edit';
+        editBtn.className = 'btn btn-secondary';
+        editActions.classList.remove('d-none');
+
+        editableFields.forEach(field => {
+            const displayValue = field.querySelector('.display-value');
+            const input = field.querySelector('.edit-input');
+            displayValue.classList.add('d-none');
+            input.classList.remove('d-none');
+        });
+    } else {
+        cancelTourEdit();
+    }
+}
+
+function cancelTourEdit() {
+    isEditingTour = false;
+    const editBtn = document.getElementById('edit-tour-btn');
+    const editActions = document.querySelector('.edit-actions');
+    const editableFields = document.querySelectorAll('.editable-field');
+
+    // Reset button
+    editBtn.innerHTML = '<i class="fas fa-edit"></i> Edit Tour';
+    editBtn.className = 'btn btn-primary';
+    editActions.classList.add('d-none');
+
+    // Reset fields
+    editableFields.forEach(field => {
+        const displayValue = field.querySelector('.display-value');
+        const input = field.querySelector('.edit-input');
+
+        // Reset input to original value
+        input.value = input.getAttribute('data-original');
+
+        displayValue.classList.remove('d-none');
+        input.classList.add('d-none');
+    });
+}
+
+function saveTourChanges() {
+    const tourId = '{{ tour.tour_id }}';
+    const propagateToOrders = document.getElementById('propagateToOrders').checked;
+    const changes = {};
+    let hasChanges = false;
+
+    // Collect changes
+    document.querySelectorAll('.editable-field').forEach(field => {
+        const input = field.querySelector('.edit-input');
+        const fieldName = field.getAttribute('data-field');
+        const originalValue = input.getAttribute('data-original');
+        const currentValue = input.value.trim();
+
+        if (currentValue !== originalValue) {
+            changes[fieldName] = currentValue;
+            hasChanges = true;
+        }
+    });
+
+    if (!hasChanges) {
+        showAlert('info', 'No changes to save.');
+        cancelTourEdit();
+        return;
+    }
+
+    // Show loading state
+    const saveBtn = document.querySelector('.edit-actions .btn-success');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+
+    // Save changes
+    fetch(`/api/tours/${encodeURIComponent(tourId)}/edit`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            modified_by: 'User',
+            data: changes,
+            propagate_to_orders: propagateToOrders
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', `Tour updated successfully! ${data.message}`);
+
+            // Update displayed values
+            Object.keys(changes).forEach(fieldName => {
+                const field = document.querySelector(`[data-field="${fieldName}"]`);
+                if (field) {
+                    const displayValue = field.querySelector('.display-value');
+                    const input = field.querySelector('.edit-input');
+                    const newValue = changes[fieldName];
+
+                    // Update display text
+                    const icon = displayValue.querySelector('i');
+                    displayValue.innerHTML = '';
+                    if (icon) displayValue.appendChild(icon.cloneNode(true));
+                    displayValue.appendChild(document.createTextNode(newValue || 'Not assigned'));
+
+                    // Update original value for future editing
+                    input.setAttribute('data-original', newValue);
+                }
+            });
+
+            cancelTourEdit();
+
+            // If orders were propagated, show additional info
+            if (data.propagated_orders > 0) {
+                showAlert('info', `Changes propagated to ${data.propagated_orders} linked orders.`);
+            }
+        } else {
+            showAlert('danger', `Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'An error occurred while saving changes.');
+    })
+    .finally(() => {
+        // Reset button state
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+function showAlert(type, message) {
+    // Remove existing alerts
+    document.querySelectorAll('.tour-edit-alert').forEach(alert => alert.remove());
+
+    // Create new alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show tour-edit-alert`;
+    alertDiv.innerHTML = `
+        <i class="fas fa-info-circle me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert at the top of the content
+    const firstCard = document.querySelector('.card');
+    firstCard.parentNode.insertBefore(alertDiv, firstCard);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
 </script>
 
 <style>
@@ -404,6 +604,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .filtered-out {
     display: none !important;
+}
+
+/* Tour editing styles */
+.editable-field {
+    position: relative;
+}
+
+.editable-field .edit-input {
+    font-size: 0.95rem;
+}
+
+.edit-actions {
+    background-color: var(--bs-light);
+    border-radius: 0.375rem;
+    padding: 1rem;
+}
+
+.tour-edit-alert {
+    margin-bottom: 1rem;
+}
+
+.edit-input:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
 </style>
 {% endblock %}

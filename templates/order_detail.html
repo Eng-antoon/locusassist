@@ -27,6 +27,10 @@
             </span>
         {% endif %}
 
+        <button class="btn btn-primary me-2" id="edit-order-btn" onclick="toggleOrderEdit()">
+            <i class="fas fa-edit"></i>
+            Edit Order
+        </button>
         <a href="{{ url_for('dashboard', date=date) }}" class="btn btn-secondary">
             <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
         </a>
@@ -337,14 +341,23 @@
                 <!-- Order Status and Basic Info -->
                 <div class="row mb-4">
                     <div class="col-md-3">
-                        <div class="info-item">
+                        <div class="info-item editable-field" data-field="order_status">
                             <label>Status:</label>
-                            <span class="badge {{ 'bg-danger' if current_status == 'CANCELLED' else 'bg-success' if current_status == 'COMPLETED' else 'bg-warning' if current_status in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }}">
-                                {% if current_status == 'CANCELLED' %}
-                                    <i class="fas fa-times-circle me-1"></i>
-                                {% endif %}
-                                {{ current_status }}
+                            <span class="display-value">
+                                <span class="badge {{ 'bg-danger' if current_status == 'CANCELLED' else 'bg-success' if current_status == 'COMPLETED' else 'bg-warning' if current_status in ['EXECUTING', 'ONGOING'] else 'bg-secondary' }}">
+                                    {% if current_status == 'CANCELLED' %}
+                                        <i class="fas fa-times-circle me-1"></i>
+                                    {% endif %}
+                                    {{ current_status }}
+                                </span>
                             </span>
+                            <select class="form-control form-select edit-input d-none" data-original="{{ current_status }}">
+                                <option value="ASSIGNED" {{ 'selected' if current_status == 'ASSIGNED' else '' }}>ASSIGNED</option>
+                                <option value="EXECUTING" {{ 'selected' if current_status == 'EXECUTING' else '' }}>EXECUTING</option>
+                                <option value="COMPLETED" {{ 'selected' if current_status == 'COMPLETED' else '' }}>COMPLETED</option>
+                                <option value="CANCELLED" {{ 'selected' if current_status == 'CANCELLED' else '' }}>CANCELLED</option>
+                                <option value="OPEN" {{ 'selected' if current_status == 'OPEN' else '' }}>OPEN</option>
+                            </select>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -438,14 +451,16 @@
                 </div>
                 {% endif %}
 
-                <!-- Cancellation Information -->
-                {% if order.cancellation_reason %}
-                <div class="alert alert-danger mb-4">
+                <!-- Cancellation Information (dynamic visibility) -->
+                <div id="cancellation-section" class="alert alert-danger mb-4" style="display: {{ 'block' if order.cancellation_reason or (current_status == 'CANCELLED') else 'none' }};">
                     <h6 class="alert-heading">
                         <i class="fas fa-exclamation-triangle me-2"></i>Order Cancelled
                     </h6>
-                    <div class="mb-2">
-                        <strong>Cancellation Reason:</strong> {{ order.cancellation_reason }}
+                    <div class="mb-2 editable-field" data-field="cancellation_reason">
+                        <strong>Cancellation Reason:</strong>
+                        <span class="display-value">{{ order.cancellation_reason or 'Not specified' }}</span>
+                        <textarea class="form-control edit-input d-none" rows="2"
+                                  data-original="{{ order.cancellation_reason or '' }}">{{ order.cancellation_reason or '' }}</textarea>
                     </div>
                     {% if order.last_status_update %}
                     <div>
@@ -456,7 +471,6 @@
                     </div>
                     {% endif %}
                 </div>
-                {% endif %}
 
                 <!-- Location Information -->
                 {% if order.location %}
@@ -467,13 +481,17 @@
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-6">
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="location_name">
                                     <label>Name:</label>
-                                    <span class="fw-bold">{{ order.location.name }}</span>
+                                    <span class="display-value fw-bold">{{ order.location.name }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.location.name }}" data-original="{{ order.location.name }}">
                                 </div>
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="location_id">
                                     <label>ID:</label>
-                                    <span>{{ order.location.id }}</span>
+                                    <span class="display-value">{{ order.location.id }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.location.id }}" data-original="{{ order.location.id }}">
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Status:</label>
@@ -481,9 +499,11 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="location_city">
                                     <label>City:</label>
-                                    <span>{{ order.location.address.city or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.location.address.city or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.location.address.city or '' }}" data-original="{{ order.location.address.city or '' }}">
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Country:</label>
@@ -513,31 +533,46 @@
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-4">
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="rider_name">
                                     <label>Rider:</label>
-                                    <span class="fw-bold">{{ order.rider_name or tour.riderName or 'N/A' }}</span>
+                                    <span class="display-value fw-bold">{{ order.rider_name or tour.riderName or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.rider_name or tour.riderName or '' }}"
+                                           data-original="{{ order.rider_name or tour.riderName or '' }}">
                                 </div>
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="rider_phone">
                                     <label>Phone:</label>
-                                    <span>{{ order.rider_phone or tour.riderNumber or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.rider_phone or tour.riderNumber or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.rider_phone or tour.riderNumber or '' }}"
+                                           data-original="{{ order.rider_phone or tour.riderNumber or '' }}">
                                 </div>
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="rider_id">
                                     <label>Rider ID:</label>
-                                    <span>{{ order.rider_id or tour.riderId or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.rider_id or tour.riderId or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.rider_id or tour.riderId or '' }}"
+                                           data-original="{{ order.rider_id or tour.riderId or '' }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="vehicle_registration">
                                     <label>Vehicle:</label>
-                                    <span class="fw-bold">{{ order.vehicle_registration or tour.vehicleRegistrationNumber or 'N/A' }}</span>
+                                    <span class="display-value fw-bold">{{ order.vehicle_registration or tour.vehicleRegistrationNumber or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.vehicle_registration or tour.vehicleRegistrationNumber or '' }}"
+                                           data-original="{{ order.vehicle_registration or tour.vehicleRegistrationNumber or '' }}">
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Model:</label>
                                     <span>{{ order.vehicle_model or tour.vehicleModelName or 'N/A' }}</span>
                                 </div>
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="vehicle_id">
                                     <label>Vehicle ID:</label>
-                                    <span>{{ order.vehicle_id or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.vehicle_id or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.vehicle_id or '' }}"
+                                           data-original="{{ order.vehicle_id or '' }}">
                                 </div>
                             </div>
                             <div class="col-md-4">
@@ -545,9 +580,12 @@
                                     <label>Tour ID:</label>
                                     <span class="small">{{ order.tour_id or tour.tourId or 'N/A' }}</span>
                                 </div>
-                                <div class="info-item mb-2">
+                                <div class="info-item mb-2 editable-field" data-field="tour_name">
                                     <label>Tour Name:</label>
-                                    <span>{{ order.tour_name or 'N/A' }}</span>
+                                    <span class="display-value">{{ order.tour_name or 'N/A' }}</span>
+                                    <input type="text" class="form-control edit-input d-none"
+                                           value="{{ order.tour_name or '' }}"
+                                           data-original="{{ order.tour_name or '' }}">
                                 </div>
                                 <div class="info-item mb-2">
                                     <label>Sequence:</label>
@@ -602,12 +640,23 @@
                 <!-- Enhanced Line Items with SKU Details -->
                 {% if order.lineItems %}
                 <div class="card mb-4">
-                    <div class="card-header">
-                        <h6><i class="fas fa-list me-2"></i>Order Items ({{ order.lineItems|length }})</h6>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6><i class="fas fa-list me-2"></i>Order Items (<span id="items-count">{{ order.lineItems|length }}</span>)</h6>
+                        <div class="order-items-actions d-none">
+                            <button class="btn btn-success btn-sm" onclick="saveOrderItems()">
+                                <i class="fas fa-save"></i> Save Items
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="cancelOrderItemsEdit()">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="addOrderItem()">
+                                <i class="fas fa-plus"></i> Add Item
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table class="table table-striped">
+                            <table class="table table-striped" id="order-items-table">
                                 <thead>
                                     <tr>
                                         <th>SKU ID</th>
@@ -618,36 +667,69 @@
                                         <th>Volume (per unit)</th>
                                         <th>Unit</th>
                                         <th>Handling Unit</th>
+                                        <th class="order-items-actions d-none">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="order-items-tbody">
                                     {% for item in order.lineItems %}
-                                    <tr>
-                                        <td><code>{{ item.id }}</code></td>
-                                        <td><strong>{{ item.name }}</strong></td>
-                                        <td><small class="text-muted">{{ item.description or 'N/A' }}</small></td>
-                                        <td>
-                                            <span class="badge bg-primary">
-                                                {{ item.quantity }} {{ item.quantityUnit }}
+                                    <tr data-item-id="{{ item.id }}" data-original-data="{{ item|tojson|e }}">
+                                        <td class="editable-cell" data-field="sku_id">
+                                            <span class="display-value"><code>{{ item.id }}</code></span>
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.id }}">
+                                        </td>
+                                        <td class="editable-cell" data-field="name">
+                                            <span class="display-value"><strong>{{ item.name }}</strong></span>
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.name }}">
+                                        </td>
+                                        <td class="editable-cell" data-field="description">
+                                            <span class="display-value"><small class="text-muted">{{ item.description or 'N/A' }}</small></span>
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.description or '' }}">
+                                        </td>
+                                        <td class="editable-cell" data-field="quantity">
+                                            <span class="display-value">
+                                                <span class="badge bg-primary">{{ item.quantity }} {{ item.quantityUnit }}</span>
                                             </span>
+                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.quantity }}">
                                         </td>
-                                        <td>
-                                            {% if item.totalWeight %}
-                                                {{ item.totalWeight.value }}{{ item.totalWeight.unit }}
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
+                                        <td class="editable-cell" data-field="weight">
+                                            <span class="display-value">
+                                                {% if item.totalWeight %}
+                                                    {{ item.totalWeight.value }}{{ item.totalWeight.unit }}
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            </span>
+                                            <input type="number" step="0.01" class="form-control form-control-sm edit-input d-none"
+                                                   value="{{ item.totalWeight.value if item.totalWeight else '' }}">
                                         </td>
-                                        <td>
-                                            {% if item.totalVolume %}
-                                                {{ item.totalVolume.value }}{{ item.totalVolume.unit }}
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
+                                        <td class="editable-cell" data-field="volume">
+                                            <span class="display-value">
+                                                {% if item.totalVolume %}
+                                                    {{ item.totalVolume.value }}{{ item.totalVolume.unit }}
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            </span>
+                                            <input type="number" step="0.01" class="form-control form-control-sm edit-input d-none"
+                                                   value="{{ item.totalVolume.value if item.totalVolume else '' }}">
                                         </td>
-                                        <td>{{ item.quantityUnit }}</td>
-                                        <td>
-                                            <span class="badge bg-info">{{ item.handlingUnit }}</span>
+                                        <td class="editable-cell" data-field="unit">
+                                            <span class="display-value">{{ item.quantityUnit }}</span>
+                                            <select class="form-control form-control-sm edit-input d-none">
+                                                <option value="PIECES" {{ 'selected' if item.quantityUnit == 'PIECES' else '' }}>PIECES</option>
+                                                <option value="BOXES" {{ 'selected' if item.quantityUnit == 'BOXES' else '' }}>BOXES</option>
+                                                <option value="KILOGRAMS" {{ 'selected' if item.quantityUnit == 'KILOGRAMS' else '' }}>KILOGRAMS</option>
+                                                <option value="LITERS" {{ 'selected' if item.quantityUnit == 'LITERS' else '' }}>LITERS</option>
+                                            </select>
+                                        </td>
+                                        <td class="editable-cell" data-field="handling_unit">
+                                            <span class="display-value"><span class="badge bg-info">{{ item.handlingUnit }}</span></span>
+                                            <input type="text" class="form-control form-control-sm edit-input d-none" value="{{ item.handlingUnit }}">
+                                        </td>
+                                        <td class="order-items-actions d-none">
+                                            <button class="btn btn-danger btn-sm" onclick="deleteOrderItem(this)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -685,12 +767,20 @@
                 <!-- Transaction Details -->
                 {% if order.orderMetadata.lineItems %}
                 <div class="card mb-4">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h6><i class="fas fa-exchange-alt me-2"></i>Transaction Details ({{ order.orderMetadata.lineItems|length }} items)</h6>
+                        <div class="transaction-actions d-none">
+                            <button class="btn btn-success btn-sm" onclick="saveTransactionDetails()">
+                                <i class="fas fa-save"></i> Save Transactions
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="cancelTransactionEdit()">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table class="table table-striped">
+                            <table class="table table-striped" id="transaction-table">
                                 <thead>
                                     <tr>
                                         <th>SKU ID</th>
@@ -701,24 +791,40 @@
                                         <th>Delivered At</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="transaction-tbody">
                                     {% for item in order.orderMetadata.lineItems %}
-                                    <tr>
+                                    <tr data-transaction-id="{{ item.id }}">
                                         <td><code>{{ item.id }}</code></td>
-                                        <td>{{ item.transactionStatus.orderedQuantity }}</td>
-                                        <td>
-                                            <span class="badge bg-primary">
-                                                {{ item.transactionStatus.transactedQuantity }}
+                                        <td class="editable-cell" data-field="ordered_quantity">
+                                            <span class="display-value">{{ item.transactionStatus.orderedQuantity }}</span>
+                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.transactionStatus.orderedQuantity }}">
+                                        </td>
+                                        <td class="editable-cell" data-field="transacted_quantity">
+                                            <span class="display-value">
+                                                <span class="badge bg-primary">{{ item.transactionStatus.transactedQuantity }}</span>
                                             </span>
+                                            <input type="number" class="form-control form-control-sm edit-input d-none" value="{{ item.transactionStatus.transactedQuantity }}">
                                         </td>
-                                        <td>
-                                            {% if item.transactionStatus.transactedWeight %}
-                                                {{ item.transactionStatus.transactedWeight.value }}{{ item.transactionStatus.transactedWeight.unit }}
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
+                                        <td class="editable-cell" data-field="transacted_weight">
+                                            <span class="display-value">
+                                                {% if item.transactionStatus.transactedWeight %}
+                                                    {{ item.transactionStatus.transactedWeight.value }}{{ item.transactionStatus.transactedWeight.unit }}
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            </span>
+                                            <input type="number" step="0.01" class="form-control form-control-sm edit-input d-none"
+                                                   value="{{ item.transactionStatus.transactedWeight.value if item.transactionStatus.transactedWeight else '' }}">
                                         </td>
-                                        <td><span class="badge bg-success">{{ item.transactionStatus.status }}</span></td>
+                                        <td class="editable-cell" data-field="transaction_status">
+                                            <span class="display-value"><span class="badge bg-success">{{ item.transactionStatus.status }}</span></span>
+                                            <select class="form-control form-control-sm edit-input d-none">
+                                                <option value="DELIVERED" {{ 'selected' if item.transactionStatus.status == 'DELIVERED' else '' }}>DELIVERED</option>
+                                                <option value="PARTIALLY_DELIVERED" {{ 'selected' if item.transactionStatus.status == 'PARTIALLY_DELIVERED' else '' }}>PARTIALLY_DELIVERED</option>
+                                                <option value="NOT_DELIVERED" {{ 'selected' if item.transactionStatus.status == 'NOT_DELIVERED' else '' }}>NOT_DELIVERED</option>
+                                                <option value="RETURNED" {{ 'selected' if item.transactionStatus.status == 'RETURNED' else '' }}>RETURNED</option>
+                                            </select>
+                                        </td>
                                         <td>
                                             {% if item.transactionStatus.triggerTime %}
                                                 <small>{{ item.transactionStatus.triggerTime.split('T')[1].split('.')[0] if 'T' in item.transactionStatus.triggerTime else item.transactionStatus.triggerTime }}</small>
@@ -809,6 +915,24 @@
                                 </div>
                             </div>
                             {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Edit Actions (hidden by default) -->
+                    <div class="edit-actions d-none pt-3 border-top">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success" onclick="saveOrderChanges()">
+                                <i class="fas fa-save"></i> Save Changes
+                            </button>
+                            <button class="btn btn-secondary" onclick="cancelOrderEdit()">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                            <button class="btn btn-info" onclick="toggleOrderItemsEdit()">
+                                <i class="fas fa-list"></i> Edit Items
+                            </button>
+                            <button class="btn btn-warning" onclick="toggleTransactionEdit()">
+                                <i class="fas fa-exchange-alt"></i> Edit Transactions
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1269,6 +1393,604 @@ async function reprocessOrder(orderId, date) {
         button.disabled = false;
         button.innerHTML = '<i class="fas fa-redo me-1"></i>Re-process GRN';
     }
+}
+
+// Order editing functionality
+let isEditingOrder = false;
+
+function toggleOrderEdit() {
+    isEditingOrder = !isEditingOrder;
+    const editBtn = document.getElementById('edit-order-btn');
+    const editActions = document.querySelector('.edit-actions');
+    const editableFields = document.querySelectorAll('.editable-field');
+
+    if (isEditingOrder) {
+        // Enter edit mode
+        editBtn.innerHTML = '<i class="fas fa-times"></i> Cancel Edit';
+        editBtn.className = 'btn btn-secondary me-2';
+        editActions.classList.remove('d-none');
+
+        editableFields.forEach(field => {
+            const displayValue = field.querySelector('.display-value');
+            const input = field.querySelector('.edit-input');
+            if (displayValue && input) {
+                displayValue.classList.add('d-none');
+                input.classList.remove('d-none');
+            }
+        });
+    } else {
+        cancelOrderEdit();
+    }
+}
+
+function cancelOrderEdit() {
+    isEditingOrder = false;
+    const editBtn = document.getElementById('edit-order-btn');
+    const editActions = document.querySelector('.edit-actions');
+    const editableFields = document.querySelectorAll('.editable-field');
+
+    // Reset button
+    editBtn.innerHTML = '<i class="fas fa-edit"></i> Edit Order';
+    editBtn.className = 'btn btn-primary me-2';
+    editActions.classList.add('d-none');
+
+    // Reset fields
+    editableFields.forEach(field => {
+        const displayValue = field.querySelector('.display-value');
+        const input = field.querySelector('.edit-input');
+
+        if (displayValue && input) {
+            // Reset input to original value
+            if (input.tagName === 'TEXTAREA') {
+                input.value = input.getAttribute('data-original');
+            } else if (input.tagName === 'SELECT') {
+                input.value = input.getAttribute('data-original');
+            } else {
+                input.value = input.getAttribute('data-original');
+            }
+
+            displayValue.classList.remove('d-none');
+            input.classList.add('d-none');
+        }
+    });
+}
+
+function saveOrderChanges() {
+    const orderId = '{{ order_id }}';
+    const changes = {};
+    let hasChanges = false;
+
+    // Collect changes
+    document.querySelectorAll('.editable-field').forEach(field => {
+        const input = field.querySelector('.edit-input');
+        const fieldName = field.getAttribute('data-field');
+
+        if (input) {
+            const originalValue = input.getAttribute('data-original') || '';
+            let currentValue;
+
+            if (input.tagName === 'TEXTAREA') {
+                currentValue = input.value.trim();
+            } else if (input.tagName === 'SELECT') {
+                currentValue = input.value;
+            } else {
+                currentValue = input.value.trim();
+            }
+
+            if (currentValue !== originalValue) {
+                changes[fieldName] = currentValue;
+                hasChanges = true;
+            }
+        }
+    });
+
+    if (!hasChanges) {
+        showOrderAlert('info', 'No changes to save.');
+        cancelOrderEdit();
+        return;
+    }
+
+    // Show loading state
+    const saveBtn = document.querySelector('.edit-actions .btn-success');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+
+    // Save changes
+    fetch(`/api/orders/${orderId}/edit`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            modified_by: 'User',
+            data: changes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showOrderAlert('success', `Order updated successfully! ${data.message}`);
+
+            // Update displayed values
+            Object.keys(changes).forEach(fieldName => {
+                const field = document.querySelector(`[data-field="${fieldName}"]`);
+                if (field) {
+                    const displayValue = field.querySelector('.display-value');
+                    const input = field.querySelector('.edit-input');
+                    const newValue = changes[fieldName];
+
+                    // Update display based on field type
+                    if (fieldName === 'order_status') {
+                        // Special handling for status badge
+                        const badge = displayValue.querySelector('.badge');
+                        if (badge) {
+                            badge.textContent = newValue;
+                            // Update badge class based on status
+                            badge.className = `badge ${getBadgeClassForStatus(newValue)}`;
+                        }
+
+                        // Handle cancellation section visibility
+                        const cancellationSection = document.getElementById('cancellation-section');
+                        if (newValue === 'CANCELLED') {
+                            cancellationSection.style.display = 'block';
+                        } else {
+                            cancellationSection.style.display = 'none';
+                            // Clear cancellation reason when status is not cancelled
+                            const cancellationField = document.querySelector('[data-field="cancellation_reason"]');
+                            if (cancellationField) {
+                                const cancellationDisplay = cancellationField.querySelector('.display-value');
+                                const cancellationInput = cancellationField.querySelector('.edit-input');
+                                cancellationDisplay.textContent = 'Not specified';
+                                cancellationInput.value = '';
+                                cancellationInput.setAttribute('data-original', '');
+                            }
+                        }
+                    } else if (fieldName === 'cancellation_reason') {
+                        // Update textarea display
+                        displayValue.textContent = newValue || 'Not specified';
+                    } else {
+                        // Regular text update
+                        displayValue.textContent = newValue || 'N/A';
+                    }
+
+                    // Update original value for future editing
+                    input.setAttribute('data-original', newValue);
+                }
+            });
+
+            cancelOrderEdit();
+
+            // If status changed to CANCELLED, show cancellation section
+            if (changes.order_status === 'CANCELLED') {
+                showOrderAlert('info', 'Order marked as cancelled. You can now add cancellation reason and images.');
+            }
+        } else {
+            showOrderAlert('danger', `Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showOrderAlert('danger', 'An error occurred while saving changes.');
+    })
+    .finally(() => {
+        // Reset button state
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+function getBadgeClassForStatus(status) {
+    switch (status) {
+        case 'CANCELLED':
+            return 'bg-danger';
+        case 'COMPLETED':
+            return 'bg-success';
+        case 'EXECUTING':
+        case 'ONGOING':
+            return 'bg-warning';
+        default:
+            return 'bg-secondary';
+    }
+}
+
+function showOrderAlert(type, message) {
+    // Remove existing alerts
+    document.querySelectorAll('.order-edit-alert').forEach(alert => alert.remove());
+
+    // Create new alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show order-edit-alert`;
+    alertDiv.innerHTML = `
+        <i class="fas fa-info-circle me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert at the top of the content
+    const firstElement = document.querySelector('.row.mb-3');
+    firstElement.parentNode.insertBefore(alertDiv, firstElement);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+// Order Items editing functionality
+let isEditingOrderItems = false;
+
+function toggleOrderItemsEdit() {
+    isEditingOrderItems = !isEditingOrderItems;
+    const editBtn = document.getElementById('edit-order-btn');
+    const itemsActions = document.querySelectorAll('.order-items-actions');
+    const editableCells = document.querySelectorAll('#order-items-table .editable-cell');
+
+    if (isEditingOrderItems) {
+        // Show items editing controls
+        itemsActions.forEach(action => action.classList.remove('d-none'));
+
+        // Make cells editable
+        editableCells.forEach(cell => {
+            const displayValue = cell.querySelector('.display-value');
+            const input = cell.querySelector('.edit-input');
+            if (displayValue && input) {
+                displayValue.classList.add('d-none');
+                input.classList.remove('d-none');
+            }
+        });
+    } else {
+        cancelOrderItemsEdit();
+    }
+}
+
+function cancelOrderItemsEdit() {
+    isEditingOrderItems = false;
+    const itemsActions = document.querySelectorAll('.order-items-actions');
+    const editableCells = document.querySelectorAll('#order-items-table .editable-cell');
+
+    // Hide items editing controls
+    itemsActions.forEach(action => action.classList.add('d-none'));
+
+    // Reset cells to display mode
+    editableCells.forEach(cell => {
+        const displayValue = cell.querySelector('.display-value');
+        const input = cell.querySelector('.edit-input');
+        if (displayValue && input) {
+            displayValue.classList.remove('d-none');
+            input.classList.add('d-none');
+        }
+    });
+
+    // Remove any new rows that weren't saved
+    const newRows = document.querySelectorAll('#order-items-tbody tr[data-new-item="true"]');
+    newRows.forEach(row => row.remove());
+}
+
+function addOrderItem() {
+    const tbody = document.getElementById('order-items-tbody');
+    const newRow = document.createElement('tr');
+    newRow.setAttribute('data-new-item', 'true');
+
+    newRow.innerHTML = `
+        <td class="editable-cell" data-field="sku_id">
+            <input type="text" class="form-control form-control-sm edit-input" placeholder="Enter SKU ID">
+        </td>
+        <td class="editable-cell" data-field="name">
+            <input type="text" class="form-control form-control-sm edit-input" placeholder="Product Name">
+        </td>
+        <td class="editable-cell" data-field="description">
+            <input type="text" class="form-control form-control-sm edit-input" placeholder="Description">
+        </td>
+        <td class="editable-cell" data-field="quantity">
+            <input type="number" class="form-control form-control-sm edit-input" value="1">
+        </td>
+        <td class="editable-cell" data-field="weight">
+            <input type="number" step="0.01" class="form-control form-control-sm edit-input" placeholder="Weight">
+        </td>
+        <td class="editable-cell" data-field="volume">
+            <input type="number" step="0.01" class="form-control form-control-sm edit-input" placeholder="Volume">
+        </td>
+        <td class="editable-cell" data-field="unit">
+            <select class="form-control form-control-sm edit-input">
+                <option value="PIECES">PIECES</option>
+                <option value="BOXES">BOXES</option>
+                <option value="KILOGRAMS">KILOGRAMS</option>
+                <option value="LITERS">LITERS</option>
+            </select>
+        </td>
+        <td class="editable-cell" data-field="handling_unit">
+            <input type="text" class="form-control form-control-sm edit-input" placeholder="Handling Unit">
+        </td>
+        <td>
+            <button class="btn btn-danger btn-sm" onclick="deleteOrderItem(this)">
+                <i class="fas fa-trash"></i>
+            </button>
+        </td>
+    `;
+
+    tbody.appendChild(newRow);
+
+    // Focus on first input
+    const firstInput = newRow.querySelector('input');
+    if (firstInput) firstInput.focus();
+}
+
+function deleteOrderItem(button) {
+    const row = button.closest('tr');
+    if (confirm('Are you sure you want to delete this item?')) {
+        row.remove();
+        updateItemsCount();
+    }
+}
+
+function updateItemsCount() {
+    const count = document.querySelectorAll('#order-items-tbody tr').length;
+    document.getElementById('items-count').textContent = count;
+}
+
+function saveOrderItems() {
+    const orderId = '{{ order_id }}';
+    const rows = document.querySelectorAll('#order-items-tbody tr');
+    const lineItems = [];
+
+    let hasErrors = false;
+
+    rows.forEach(row => {
+        const item = {};
+        const cells = row.querySelectorAll('.editable-cell');
+
+        cells.forEach(cell => {
+            const field = cell.getAttribute('data-field');
+            const input = cell.querySelector('.edit-input');
+
+            if (input) {
+                let value = input.value.trim();
+
+                // Validate required fields
+                if ((field === 'sku_id' || field === 'name') && !value) {
+                    input.classList.add('is-invalid');
+                    hasErrors = true;
+                    return;
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+
+                // Map fields to API format
+                switch (field) {
+                    case 'sku_id':
+                        item.sku_id = value;
+                        break;
+                    case 'name':
+                        item.name = value;
+                        break;
+                    case 'description':
+                        item.description = value;
+                        break;
+                    case 'quantity':
+                        item.quantity = parseInt(value) || 0;
+                        break;
+                    case 'weight':
+                        item.weight_per_unit = parseFloat(value) || 0;
+                        break;
+                    case 'volume':
+                        item.volume_per_unit = parseFloat(value) || 0;
+                        break;
+                    case 'unit':
+                        item.quantity_unit = value;
+                        break;
+                    case 'handling_unit':
+                        item.handling_unit = value;
+                        break;
+                }
+            }
+        });
+
+        // Add item ID for existing items
+        const itemId = row.getAttribute('data-item-id');
+        if (itemId && !row.getAttribute('data-new-item')) {
+            item.id = itemId;
+        }
+
+        lineItems.push(item);
+    });
+
+    if (hasErrors) {
+        showOrderAlert('danger', 'Please fill in all required fields (SKU ID and Product Name).');
+        return;
+    }
+
+    // Get deleted item IDs
+    const deletedItemIds = [];
+    // Note: In a full implementation, you'd track deleted items here
+
+    // Save to server
+    const saveBtn = document.querySelector('.order-items-actions .btn-success');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+
+    fetch(`/api/orders/${orderId}/line-items/edit`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            modified_by: 'User',
+            line_items: lineItems,
+            deleted_item_ids: deletedItemIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showOrderAlert('success', `Order items updated: ${data.message}`);
+            // Refresh page to show updated data
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showOrderAlert('danger', `Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showOrderAlert('danger', 'An error occurred while saving order items.');
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+// Transaction Details editing functionality
+let isEditingTransactions = false;
+
+function toggleTransactionEdit() {
+    isEditingTransactions = !isEditingTransactions;
+    const transactionActions = document.querySelectorAll('.transaction-actions');
+    const editableCells = document.querySelectorAll('#transaction-table .editable-cell');
+
+    if (isEditingTransactions) {
+        // Show transaction editing controls
+        transactionActions.forEach(action => action.classList.remove('d-none'));
+
+        // Make cells editable
+        editableCells.forEach(cell => {
+            const displayValue = cell.querySelector('.display-value');
+            const input = cell.querySelector('.edit-input');
+            if (displayValue && input) {
+                displayValue.classList.add('d-none');
+                input.classList.remove('d-none');
+
+                // Store original value
+                const originalValue = input.value;
+                input.setAttribute('data-original', originalValue);
+            }
+        });
+    } else {
+        cancelTransactionEdit();
+    }
+}
+
+function cancelTransactionEdit() {
+    isEditingTransactions = false;
+    const transactionActions = document.querySelectorAll('.transaction-actions');
+    const editableCells = document.querySelectorAll('#transaction-table .editable-cell');
+
+    // Hide transaction editing controls
+    transactionActions.forEach(action => action.classList.add('d-none'));
+
+    // Restore display mode
+    editableCells.forEach(cell => {
+        const displayValue = cell.querySelector('.display-value');
+        const input = cell.querySelector('.edit-input');
+        if (displayValue && input) {
+            displayValue.classList.remove('d-none');
+            input.classList.add('d-none');
+
+            // Restore original value
+            const originalValue = input.getAttribute('data-original');
+            if (originalValue !== null) {
+                input.value = originalValue;
+            }
+            input.classList.remove('is-invalid');
+        }
+    });
+}
+
+function saveTransactionDetails() {
+    if (!orderId) {
+        showOrderAlert('danger', 'Order ID not found.');
+        return;
+    }
+
+    const transactionRows = document.querySelectorAll('#transaction-tbody tr[data-transaction-id]');
+    const transactions = [];
+    let hasErrors = false;
+
+    transactionRows.forEach(row => {
+        const transactionId = row.getAttribute('data-transaction-id');
+        const transaction = {
+            id: transactionId
+        };
+
+        const editableCells = row.querySelectorAll('.editable-cell');
+        editableCells.forEach(cell => {
+            const field = cell.getAttribute('data-field');
+            const input = cell.querySelector('.edit-input');
+
+            if (input) {
+                const value = input.value;
+
+                // Validate required fields
+                if ((field === 'ordered_quantity' || field === 'transacted_quantity') && (!value || isNaN(value))) {
+                    input.classList.add('is-invalid');
+                    hasErrors = true;
+                    return;
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+
+                // Map fields to API format
+                switch (field) {
+                    case 'ordered_quantity':
+                        transaction.ordered_quantity = parseInt(value) || 0;
+                        break;
+                    case 'transacted_quantity':
+                        transaction.transacted_quantity = parseInt(value) || 0;
+                        break;
+                    case 'transacted_weight':
+                        transaction.transacted_weight = parseFloat(value) || 0;
+                        break;
+                    case 'transaction_status':
+                        transaction.status = value;
+                        break;
+                }
+            }
+        });
+
+        transactions.push(transaction);
+    });
+
+    if (hasErrors) {
+        showOrderAlert('danger', 'Please fill in all required fields with valid numbers.');
+        return;
+    }
+
+    // Save to server
+    const saveBtn = document.querySelector('.transaction-actions .btn-success');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+
+    fetch(`/api/orders/${orderId}/transactions/edit`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            modified_by: 'User',
+            transactions: transactions
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showOrderAlert('success', `Transaction details updated: ${data.message}`);
+            // Refresh page to show updated data
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showOrderAlert('danger', `Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showOrderAlert('danger', 'An error occurred while saving transaction details.');
+    })
+    .finally(() => {
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
 }
 </script>
 {% endblock %}

@@ -2115,3 +2115,7 @@ def register_routes(app, config):
                 'success': False,
                 'error': str(e)
             }), 500
+
+    # Register editing routes
+    from app.editing_routes import register_editing_routes
+    register_editing_routes(app)

@@ -109,7 +109,7 @@ class LocusAuth:
                     # Check if order already exists and update or create accordingly
                     existing_order = Order.query.filter_by(id=order_id).first()
                     if existing_order:
-                        # Update existing order
+                        # Update existing order using data protection service
                         self._update_existing_order_record(existing_order, order_data, client_id, order_date)
                     else:
                         # Create new order
@@ -709,15 +709,18 @@ class LocusAuth:
             return self.get_orders_from_database(client_id, date, cache_key_suffix) or {'orders': [], 'totalCount': 0}
 
     def smart_merge_orders_to_database(self, orders_data, client_id, date_str):
-        """Merge orders to database - update existing, add new ones"""
+        """Merge orders to database with data protection - update existing (respecting isModified flags), add new ones"""
         try:
-            from models import OrderLineItem
+            from app.data_protection import data_protection_service
 
             order_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             orders = orders_data.get('orders', [])
 
             updated_count = 0
             added_count = 0
+            protected_count = 0
+
+            logger.info(f"SMART MERGE: Processing {len(orders)} orders for {date_str}")
 
             for order_data in orders:
                 order_id = order_data.get('id')
@@ -728,83 +731,29 @@ class LocusAuth:
                 existing_order = Order.query.filter_by(id=order_id).first()
 
                 if existing_order:
-                    # Update existing order - only update if data has changed
-                    new_raw_data = json.dumps(order_data)
-                    if existing_order.raw_data != new_raw_data:
-                        existing_order.raw_data = new_raw_data
-                        existing_order.order_status = order_data.get('orderStatus', '')
-                        logger.info(f"Existing order status: {existing_order.order_status}, New order status: {order_data.get('orderStatus', '')}")
-                        # Update other fields as needed
-                        location = order_data.get('location', {})
-                        if location and isinstance(location, dict):
-                            existing_order.location_name = location.get('name')
-                            address = location.get('address')
-                            if address and isinstance(address, dict):
-                                existing_order.location_address = address.get('formattedAddress')
-                                existing_order.location_city = address.get('city')
-                                existing_order.location_country_code = address.get('countryCode')
+                    # Check if this order has been manually modified
+                    if existing_order.is_modified:
+                        protected_fields = data_protection_service.get_protected_fields(existing_order)
+                        logger.info(f"PROTECTED ORDER: {order_id} has {len(protected_fields)} protected fields: {protected_fields}")
+                        protected_count += 1
 
-                            # Extract coordinates from location.latLng
-                            latLng = location.get('latLng', {})
-                            if latLng and isinstance(latLng, dict):
-                                lat = latLng.get('lat')
-                                lng = latLng.get('lng')
-                                logger.info(f"[COORDINATES] Extracting coordinates for order {order_id}: lat={lat}, lng={lng}")
-                                if lat is not None:
-                                    try:
-                                        existing_order.location_latitude = float(lat)
-                                        logger.info(f"[COORDINATES] Successfully saved latitude {lat} for order {order_id}")
-                                    except (ValueError, TypeError):
-                                        logger.warning(f"[COORDINATES] Invalid latitude value for order {order_id}: {lat}")
-                                if lng is not None:
-                                    try:
-                                        existing_order.location_longitude = float(lng)
-                                        logger.info(f"[COORDINATES] Successfully saved longitude {lng} for order {order_id}")
-                                    except (ValueError, TypeError):
-                                        logger.warning(f"[COORDINATES] Invalid longitude value for order {order_id}: {lng}")
-                            else:
-                                logger.warning(f"[COORDINATES] No latLng data found for order {order_id}")
-
-                        # Extract tour/delivery data (defensive programming)
-                        order_metadata = order_data.get('orderMetadata')
-                        if order_metadata and isinstance(order_metadata, dict):
-                            tour_detail = order_metadata.get('tourDetail')
-                            if tour_detail and isinstance(tour_detail, dict):
-                                existing_order.rider_name = tour_detail.get('riderName')
-                                existing_order.vehicle_registration = tour_detail.get('vehicleRegistrationNumber')
-
-                                # Update tour data
-                                tour_id = tour_detail.get('tourId')
-                                if tour_id:
-                                    from models import Tour
-                                    existing_order.tour_id = tour_id
-
-                                    # Parse tour ID components
-                                    tour_date, plan_id, tour_name, tour_number = Tour.parse_tour_id(tour_id)
-                                    if tour_date:
-                                        existing_order.tour_date = tour_date
-                                        existing_order.tour_plan_id = plan_id
-                                        existing_order.tour_name = tour_name
-                                        existing_order.tour_number = tour_number or 0
-
-                        if order_data.get('completedOn'):
-                            try:
-                                existing_order.completed_on = datetime.fromisoformat(order_data['completedOn'].replace('Z', '+00:00'))
-                            except:
-                                pass
-
-
-                        existing_order.updated_at = datetime.now()
-                        updated_count += 1
-                        logger.info(f"Updated existing order: {order_id}")
+                    # Use data protection service to safely update
+                    data_protection_service.safe_update_order(existing_order, order_data, client_id, order_date)
+                    updated_count += 1
+                    logger.debug(f"Updated existing order: {order_id}")
                 else:
                     # Add new order
                     self._create_new_order_record(order_data, client_id, order_date)
                     added_count += 1
-                    logger.info(f"Added new order: {order_id}")
+                    logger.debug(f"Added new order: {order_id}")
 
             db.session.commit()
-            logger.info(f"Smart merge completed: {updated_count} updated, {added_count} added")
+            logger.info(f"SMART MERGE COMPLETE: {updated_count} updated, {added_count} added, {protected_count} had protected fields")
+
+            # Log protection summary for monitoring
+            if protected_count > 0:
+                logger.info(f"DATA PROTECTION: Successfully protected {protected_count} manually modified orders from API overwrites")
+
             return True
 
         except Exception as e:
@@ -982,96 +931,11 @@ class LocusAuth:
             db.session.add(line_item)
 
     def _update_existing_order_record(self, existing_order, order_data, client_id, order_date):
-        """Helper method to update an existing order record"""
-        from models import OrderLineItem
+        """Helper method to update an existing order record with data protection"""
+        from app.data_protection import data_protection_service
 
-        # Update basic fields
-        existing_order.order_status = order_data.get('orderStatus', existing_order.order_status)
-        existing_order.raw_data = json.dumps(order_data)
-        existing_order.updated_at = datetime.utcnow()
-
-        # Update location data
-        location = order_data.get('location')
-        if location and isinstance(location, dict):
-            existing_order.location_name = location.get('name', existing_order.location_name)
-            address = location.get('address')
-            if address and isinstance(address, dict):
-                existing_order.location_address = address.get('formattedAddress', existing_order.location_address)
-                existing_order.location_city = address.get('city', existing_order.location_city)
-                existing_order.location_country_code = address.get('countryCode', existing_order.location_country_code)
-
-            # Update coordinates if available
-            latLng = location.get('latLng', {})
-            if latLng and isinstance(latLng, dict):
-                lat = latLng.get('lat') or latLng.get('latitude')
-                lng = latLng.get('lng') or latLng.get('longitude')
-                logger.info(f"[COORDINATES] Updating existing order {existing_order.id}: lat={lat}, lng={lng}")
-                if lat is not None:
-                    try:
-                        existing_order.location_latitude = float(lat)
-                        logger.info(f"[COORDINATES] Successfully updated latitude {lat} for existing order {existing_order.id}")
-                    except (ValueError, TypeError):
-                        logger.warning(f"[COORDINATES] Invalid latitude value for existing order {existing_order.id}: {lat}")
-                if lng is not None:
-                    try:
-                        existing_order.location_longitude = float(lng)
-                        logger.info(f"[COORDINATES] Successfully updated longitude {lng} for existing order {existing_order.id}")
-                    except (ValueError, TypeError):
-                        logger.warning(f"[COORDINATES] Invalid longitude value for existing order {existing_order.id}: {lng}")
-            else:
-                logger.warning(f"[COORDINATES] No latLng data found for existing order {existing_order.id}")
-
-        # Update enhanced fields from order_data
-        field_mappings = {
-            'rider_name': 'rider_name', 'rider_id': 'rider_id', 'rider_phone': 'rider_phone',
-            'vehicle_registration': 'vehicle_registration', 'vehicle_id': 'vehicle_id', 'vehicle_model': 'vehicle_model',
-            'transporter_name': 'transporter_name', 'task_source': 'task_source', 'plan_id': 'plan_id',
-            'planned_tour_name': 'planned_tour_name', 'sequence_in_batch': 'sequence_in_batch',
-            'partially_delivered': 'partially_delivered', 'reassigned': 'reassigned', 'rejected': 'rejected',
-            'unassigned': 'unassigned', 'tardiness': 'tardiness', 'sla_status': 'sla_status',
-            'amount_collected': 'amount_collected', 'effective_tat': 'effective_tat',
-            'allowed_dwell_time': 'allowed_dwell_time', 'task_time_slot': 'task_time_slot',
-            'cancellation_reason': 'cancellation_reason'
-        }
-
-        for field_key, attr_name in field_mappings.items():
-            if field_key in order_data:
-                setattr(existing_order, attr_name, order_data.get(field_key))
-
-        # Handle JSON fields
-        if 'skills' in order_data:
-            existing_order.skills = json.dumps(order_data.get('skills', []))
-        if 'tags' in order_data:
-            existing_order.tags = json.dumps(order_data.get('tags', []))
-        if 'custom_fields' in order_data:
-            existing_order.custom_fields = json.dumps(order_data.get('custom_fields', {}))
-        if 'initial_assignment_by' in order_data:
-            assignment_by = order_data.get('initial_assignment_by')
-            existing_order.initial_assignment_by = json.dumps(assignment_by) if isinstance(assignment_by, dict) else assignment_by
-
-        # Handle datetime fields
-        datetime_fields = ['eta_updated_on', 'tour_updated_on', 'initial_assignment_at']
-        for field in datetime_fields:
-            if field in order_data and order_data.get(field):
-                try:
-                    setattr(existing_order, field, datetime.fromisoformat(order_data[field].replace('Z', '+00:00')))
-                except:
-                    pass
-
-        # Update line items - remove old ones and add new ones
-        OrderLineItem.query.filter_by(order_id=existing_order.id).delete()
-        line_items = order_data.get('lineItems', [])
-        for item in line_items:
-            line_item = OrderLineItem(
-                order_id=existing_order.id,
-                sku_id=item.get('skuId', ''),
-                name=item.get('name', ''),
-                quantity=item.get('quantity', 0),
-                quantity_unit=item.get('quantityUnit', ''),
-                transacted_quantity=item.get('transactedQuantity'),
-                transaction_status=item.get('transactionStatus', '')
-            )
-            db.session.add(line_item)
+        # Use the data protection service to safely update the order
+        data_protection_service.safe_update_order(existing_order, order_data, client_id, order_date)
 
     def _extract_order_from_task(self, task):
         """Extract order data from task data format"""

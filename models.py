@@ -74,6 +74,14 @@ class Order(db.Model):
     # Raw order data from Locus API
     raw_data = db.Column(db.Text)  # JSON string
 
+    # Editing support fields
+    is_modified = db.Column(db.Boolean, default=False)  # Flag to indicate manual modifications
+    modified_fields = db.Column(db.Text)  # JSON string of modified field names
+    cancellation_images = db.Column(db.Text)  # JSON array of cancellation proof image URLs/paths
+    proof_of_delivery_images = db.Column(db.Text)  # JSON array of delivery proof image URLs/paths
+    last_modified_by = db.Column(db.String(255))  # Who made the last modification
+    last_modified_at = db.Column(db.DateTime)  # When the last modification was made
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -138,6 +146,13 @@ class Order(db.Model):
             'tags': json.loads(self.tags) if self.tags else None,
             'custom_fields': json.loads(self.custom_fields) if self.custom_fields else None,
             'raw_data': json.loads(self.raw_data) if self.raw_data else None,
+            # Editing support fields
+            'is_modified': self.is_modified,
+            'modified_fields': json.loads(self.modified_fields) if self.modified_fields else [],
+            'cancellation_images': json.loads(self.cancellation_images) if self.cancellation_images else [],
+            'proof_of_delivery_images': json.loads(self.proof_of_delivery_images) if self.proof_of_delivery_images else [],
+            'last_modified_by': self.last_modified_by,
+            'last_modified_at': self.last_modified_at.isoformat() if self.last_modified_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -157,6 +172,11 @@ class OrderLineItem(db.Model):
     # Transaction status
     transacted_quantity = db.Column(db.Integer)
     transaction_status = db.Column(db.String(50))
+
+    # Editing support fields
+    is_modified = db.Column(db.Boolean, default=False)  # Flag to indicate manual modifications
+    last_modified_by = db.Column(db.String(255))  # Who made the last modification
+    last_modified_at = db.Column(db.DateTime)  # When the last modification was made
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -298,6 +318,12 @@ class Tour(db.Model):
     delivery_cities = db.Column(db.Text)  # JSON array of cities
     delivery_areas = db.Column(db.Text)  # JSON array of areas/locations
 
+    # Editing support fields
+    is_modified = db.Column(db.Boolean, default=False)  # Flag to indicate manual modifications
+    modified_fields = db.Column(db.Text)  # JSON string of modified field names
+    last_modified_by = db.Column(db.String(255))  # Who made the last modification
+    last_modified_at = db.Column(db.DateTime)  # When the last modification was made
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -324,6 +350,11 @@ class Tour(db.Model):
             'tour_status': self.tour_status,
             'delivery_cities': json.loads(self.delivery_cities) if self.delivery_cities else [],
             'delivery_areas': json.loads(self.delivery_areas) if self.delivery_areas else [],
+            # Editing support fields
+            'is_modified': self.is_modified,
+            'modified_fields': json.loads(self.modified_fields) if self.modified_fields else [],
+            'last_modified_by': self.last_modified_by,
+            'last_modified_at': self.last_modified_at.isoformat() if self.last_modified_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
