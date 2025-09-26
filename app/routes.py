@@ -1992,6 +1992,11 @@ def register_routes(app, config):
         day_filter = request.args.get('day_filter')
         aggregation_level = request.args.get('aggregation_level', 'area')
 
+        # New filter parameters
+        status_filter = request.args.get('status_filter')
+        rider_filter = request.args.get('rider_filter')
+        vehicle_filter = request.args.get('vehicle_filter')
+
         # Handle day filter - if specified, filter to single day within range
         if day_filter and date_from and date_to:
             try:
@@ -2012,7 +2017,32 @@ def register_routes(app, config):
             date=date,
             date_from=date_from,
             date_to=date_to,
-            aggregation_level=aggregation_level
+            aggregation_level=aggregation_level,
+            status_filter=status_filter,
+            rider_filter=rider_filter,
+            vehicle_filter=vehicle_filter
+        )
+
+        response = make_response(jsonify(result))
+        # Add cache-busting headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
+    @app.route('/api/heatmap/filter-options')
+    def api_heatmap_filter_options():
+        """API endpoint to get available filter options for heatmap"""
+        from app.heatmap import heatmap_service
+
+        date = request.args.get('date')
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+
+        result = heatmap_service.get_filter_options(
+            date=date,
+            date_from=date_from,
+            date_to=date_to
         )
 
         response = make_response(jsonify(result))

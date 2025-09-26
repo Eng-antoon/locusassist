@@ -20,7 +20,8 @@ class HeatmapService:
     def __init__(self):
         pass
 
-    def get_delivery_heatmap_data(self, date: str = None, date_from: str = None, date_to: str = None, aggregation_level: str = 'coordinate') -> dict:
+    def get_delivery_heatmap_data(self, date: str = None, date_from: str = None, date_to: str = None, aggregation_level: str = 'coordinate',
+                                  status_filter: str = None, rider_filter: str = None, vehicle_filter: str = None) -> dict:
         """
         Get delivery heatmap data aggregated by location
 
@@ -29,6 +30,9 @@ class HeatmapService:
             date_from: Start date for date range filtering (YYYY-MM-DD format)
             date_to: End date for date range filtering (YYYY-MM-DD format)
             aggregation_level: 'coordinate' for exact coordinates, 'area' for location names, 'city' for cities
+            status_filter: Filter by status ('completed', 'cancelled', 'partially_delivered', 'pending')
+            rider_filter: Filter by rider name
+            vehicle_filter: Filter by vehicle registration
 
         Returns:
             Dict with heatmap data and statistics
@@ -88,6 +92,29 @@ class HeatmapService:
                         'heatmap_data': [],
                         'statistics': {}
                     }
+
+            # Apply additional filters
+            if status_filter:
+                logger.info(f"📋 Applying status filter: {status_filter}")
+                if status_filter == 'completed':
+                    query = query.filter(Order.order_status == 'COMPLETED')
+                elif status_filter == 'cancelled':
+                    query = query.filter(Order.order_status == 'CANCELLED')
+                elif status_filter == 'partially_delivered':
+                    query = query.filter(Order.partially_delivered == True)
+                elif status_filter == 'pending':
+                    query = query.filter(and_(
+                        Order.order_status != 'COMPLETED',
+                        Order.order_status != 'CANCELLED'
+                    ))
+
+            if rider_filter:
+                logger.info(f"📋 Applying rider filter: {rider_filter}")
+                query = query.filter(Order.rider_name.ilike(f'%{rider_filter}%'))
+
+            if vehicle_filter:
+                logger.info(f"📋 Applying vehicle filter: {vehicle_filter}")
+                query = query.filter(Order.vehicle_registration.ilike(f'%{vehicle_filter}%'))
 
             # Get all orders with location data
             logger.info(f"📋 Executing database query...")
@@ -441,12 +468,15 @@ class HeatmapService:
         total_orders = len(orders)
         completed_orders = sum(1 for order in orders if order.order_status == 'COMPLETED')
         cancelled_orders = sum(1 for order in orders if order.order_status == 'CANCELLED')
+        partially_delivered_orders = sum(1 for order in orders if order.partially_delivered)
         pending_orders = total_orders - completed_orders - cancelled_orders
 
         total_quantity = 0
         delivered_quantity = 0
         unique_locations = set()
         unique_cities = set()
+        unique_riders = set()
+        unique_vehicles = set()
 
         for order in orders:
             # Track unique locations
@@ -454,6 +484,12 @@ class HeatmapService:
                 unique_locations.add(order.location_name)
             if order.location_city:
                 unique_cities.add(order.location_city)
+
+            # Track unique riders and vehicles for filter options
+            if order.rider_name:
+                unique_riders.add(order.rider_name)
+            if order.vehicle_registration:
+                unique_vehicles.add(order.vehicle_registration)
 
             # Sum quantities
             for line_item in order.line_items:
@@ -467,14 +503,126 @@ class HeatmapService:
             'total_orders': total_orders,
             'completed_orders': completed_orders,
             'cancelled_orders': cancelled_orders,
+            'partially_delivered_orders': partially_delivered_orders,
             'pending_orders': pending_orders,
             'completion_rate': round(completion_rate, 1),
             'total_quantity': total_quantity,
             'delivered_quantity': delivered_quantity,
             'delivery_rate': round(delivery_rate, 1),
             'unique_locations': len(unique_locations),
-            'unique_cities': len(unique_cities)
+            'unique_cities': len(unique_cities),
+            'unique_riders': len(unique_riders),
+            'unique_vehicles': len(unique_vehicles)
         }
+
+    def get_filter_options(self, date: str = None, date_from: str = None, date_to: str = None) -> dict:
+        """
+        Get available filter options for the heatmap
+
+        Args:
+            date: Filter by specific date (YYYY-MM-DD format) - for backward compatibility
+            date_from: Start date for date range filtering (YYYY-MM-DD format)
+            date_to: End date for date range filtering (YYYY-MM-DD format)
+
+        Returns:
+            Dict with available filter options
+        """
+        try:
+            # Start with base query for orders with location data
+            query = db.session.query(Order).filter(
+                and_(
+                    Order.location_latitude.isnot(None),
+                    Order.location_longitude.isnot(None)
+                )
+            )
+
+            # Apply date filtering
+            if date_from and date_to:
+                try:
+                    start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+                    query = query.filter(Order.date >= start_date)
+                    query = query.filter(Order.date <= end_date)
+                except ValueError:
+                    pass
+            elif date_from:
+                try:
+                    date_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    query = query.filter(Order.date == date_obj)
+                except ValueError:
+                    pass
+            elif date:
+                try:
+                    date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                    query = query.filter(Order.date == date_obj)
+                except ValueError:
+                    pass
+
+            # Get unique riders and vehicles
+            riders = db.session.query(Order.rider_name.distinct().label('rider_name')).filter(
+                and_(
+                    Order.location_latitude.isnot(None),
+                    Order.location_longitude.isnot(None),
+                    Order.rider_name.isnot(None)
+                )
+            )
+
+            vehicles = db.session.query(Order.vehicle_registration.distinct().label('vehicle_registration')).filter(
+                and_(
+                    Order.location_latitude.isnot(None),
+                    Order.location_longitude.isnot(None),
+                    Order.vehicle_registration.isnot(None)
+                )
+            )
+
+            # Apply same date filters to rider/vehicle queries
+            if date_from and date_to:
+                try:
+                    start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+                    riders = riders.filter(Order.date >= start_date, Order.date <= end_date)
+                    vehicles = vehicles.filter(Order.date >= start_date, Order.date <= end_date)
+                except ValueError:
+                    pass
+            elif date_from:
+                try:
+                    date_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+                    riders = riders.filter(Order.date == date_obj)
+                    vehicles = vehicles.filter(Order.date == date_obj)
+                except ValueError:
+                    pass
+            elif date:
+                try:
+                    date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                    riders = riders.filter(Order.date == date_obj)
+                    vehicles = vehicles.filter(Order.date == date_obj)
+                except ValueError:
+                    pass
+
+            rider_list = [r.rider_name for r in riders.order_by('rider_name').all() if r.rider_name]
+            vehicle_list = [v.vehicle_registration for v in vehicles.order_by('vehicle_registration').all() if v.vehicle_registration]
+
+            return {
+                'success': True,
+                'riders': rider_list,
+                'vehicles': vehicle_list,
+                'status_options': [
+                    {'value': 'completed', 'label': 'Completed Orders'},
+                    {'value': 'cancelled', 'label': 'Cancelled Orders'},
+                    {'value': 'partially_delivered', 'label': 'Partially Delivered Orders'},
+                    {'value': 'pending', 'label': 'Pending Orders'}
+                ]
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting filter options: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'riders': [],
+                'vehicles': [],
+                'status_options': []
+            }
 
     def get_location_details(self, latitude: float, longitude: float, radius: float = 0.001) -> dict:
         """

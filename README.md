@@ -424,6 +424,236 @@ function navigateWithParams(page) {
 
 ---
 
+## 🔄 Latest Development: Advanced Heatmap Filtering System (September 2025)
+
+### 📊 **Enhanced Heatmap with Multi-Filter Support**
+Completely redesigned the heatmap visualization with comprehensive filtering capabilities, interactive status cards, and advanced rider/vehicle filtering. The system now provides powerful data analysis tools with an intuitive user interface.
+
+### 🎯 **Key Features Added**
+
+#### **1. Interactive Status Filter Cards**
+- **Clickable Status Totals**: All status cards (Total Orders, Completed, Cancelled, Partially Delivered, Pending) are now clickable for instant filtering
+- **Visual Active Indicators**: Selected filter cards show subtle blue borders with gentle pulsing animation for clear visual feedback
+- **One-Click Reset**: Clicking "Total Orders" resets all status filters to show complete dataset
+- **Helpful Hint Text**: Each card displays contextual hints like "Click to filter by completed" on hover
+
+#### **2. Partially Delivered Orders Support**
+- **New Status Category**: Added "Partially Delivered Orders" as a filterable status alongside existing options
+- **Database Integration**: Enhanced backend to properly identify and count partially delivered orders using `Order.partially_delivered` field
+- **Visual Design**: Distinctive orange-themed card with truck-loading icon for easy identification
+
+#### **3. Advanced Rider & Vehicle Filtering**
+- **Searchable Dropdowns**: Dynamic dropdowns populate with actual riders and vehicles from the database
+- **Real-Time Data**: Filter options update based on current date range and existing filters
+- **Cross-Filter Intelligence**: Rider and vehicle options adjust based on available data in selected date ranges
+
+#### **4. Comprehensive Filter Management**
+- **Filter Section UI**: Dedicated three-column filter interface with Status, Rider, and Vehicle categories
+- **Clear All Filters**: Single-button reset for all active filters with visual confirmation
+- **Real-Time Updates**: All filters apply instantly without requiring manual "Apply" clicks
+- **State Persistence**: Filter selections maintain across map interactions and data refreshes
+
+### 🛠️ **Technical Implementation**
+
+#### **Backend Enhancements**
+
+**1. Enhanced Heatmap Service (`app/heatmap.py`)**
+```python
+def get_delivery_heatmap_data(self, date=None, date_from=None, date_to=None,
+                              aggregation_level='coordinate', status_filter=None,
+                              rider_filter=None, vehicle_filter=None):
+    # New filtering parameters support
+    if status_filter == 'completed':
+        query = query.filter(Order.order_status == 'COMPLETED')
+    elif status_filter == 'cancelled':
+        query = query.filter(Order.order_status == 'CANCELLED')
+    elif status_filter == 'partially_delivered':
+        query = query.filter(Order.partially_delivered == True)
+    elif status_filter == 'pending':
+        query = query.filter(and_(
+            Order.order_status != 'COMPLETED',
+            Order.order_status != 'CANCELLED'
+        ))
+```
+
+**2. Statistics Enhancement**
+```python
+def _calculate_statistics(self, orders):
+    # Added partially delivered orders counting
+    partially_delivered_orders = sum(1 for order in orders if order.partially_delivered)
+
+    # Rider/Vehicle tracking for filter options
+    for order in orders:
+        if order.rider_name:
+            unique_riders.add(order.rider_name)
+        if order.vehicle_registration:
+            unique_vehicles.add(order.vehicle_registration)
+```
+
+**3. Filter Options API (`app/routes.py`)**
+```python
+@app.route('/api/heatmap/filter-options')
+def api_heatmap_filter_options():
+    result = heatmap_service.get_filter_options(
+        date=date, date_from=date_from, date_to=date_to
+    )
+    return jsonify(result)
+```
+
+#### **Frontend Architecture**
+
+**1. Pure JavaScript Glow System**
+- **CSS Conflict Resolution**: Completely bypassed CSS specificity issues using inline styles
+- **JavaScript Animation**: Custom `setInterval()` animation that can't be overridden by external CSS
+- **Subtle Visual Feedback**: Gentle blue borders and soft shadow pulsing for active filters
+
+```javascript
+function applyGlowEffect(card) {
+    card.style.border = '2px solid #007bff';
+    card.style.background = 'rgba(0, 123, 255, 0.08)';
+    card.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
+
+    // Gentle pulsing animation
+    card.glowInterval = setInterval(() => {
+        // Subtle opacity changes for visual feedback
+    }, 100);
+}
+```
+
+**2. Advanced Filter State Management**
+```javascript
+let currentFilters = {
+    status_filter: '',
+    rider_filter: '',
+    vehicle_filter: '',
+    // ... existing filters
+};
+
+function applyStatusFilter(status) {
+    if (status === 'all') {
+        currentFilters.status_filter = '';
+        showSuccess('Showing all orders');
+    } else {
+        currentFilters.status_filter = status;
+        showSuccess(`Filtered by ${status} orders`);
+    }
+    loadHeatmapData();
+}
+```
+
+**3. Dynamic Filter Options Loading**
+```javascript
+async function loadFilterOptions() {
+    const response = await fetch(`/api/heatmap/filter-options?${params}`);
+    const result = await response.json();
+    populateFilterDropdowns(result);
+}
+```
+
+#### **Enhanced User Interface (`templates/heatmap.html`)**
+
+**1. Interactive Status Cards**
+```html
+<div class="stat-card hover-lift clickable-stat" data-filter="completed">
+    <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+        <i class="fas fa-check-circle"></i>
+    </div>
+    <div class="stat-value">${stats.completed_orders || 0}</div>
+    <div class="stat-label">Completed Orders</div>
+    <div class="stat-filter-hint">Click to filter by completed</div>
+</div>
+```
+
+**2. Comprehensive Filter Section**
+```html
+<div class="row g-4 mt-2">
+    <!-- Status Filters -->
+    <div class="col-lg-4">
+        <select class="form-select" id="status-filter">
+            <option value="">All Orders</option>
+            <option value="completed">Completed Orders</option>
+            <option value="cancelled">Cancelled Orders</option>
+            <option value="partially_delivered">Partially Delivered Orders</option>
+            <option value="pending">Pending Orders</option>
+        </select>
+    </div>
+    <!-- Rider & Vehicle Filters -->
+    <!-- ... similar structure for rider and vehicle dropdowns -->
+</div>
+```
+
+### 🎨 **User Experience Improvements**
+
+#### **Visual Design**
+- **Eye-Friendly Colors**: Subtle blue themes with gentle contrast ratios
+- **Intuitive Icons**: Context-appropriate icons for each status type (checkmark, X, truck-loading, clock)
+- **Responsive Layout**: Three-column filter layout that adapts to mobile screens
+- **Professional Animation**: Gentle pulsing effects that enhance rather than distract
+
+#### **Interaction Flow**
+1. **Quick Filtering**: Click any status card for instant filtering
+2. **Advanced Options**: Use dropdown filters for rider/vehicle specific analysis
+3. **Clear Reset**: Single button to clear all filters and return to full dataset
+4. **Visual Feedback**: Clear indication of which filters are active
+
+#### **Performance Optimization**
+- **Real-Time Updates**: All filters apply immediately without page reloads
+- **Smart Caching**: Filter options cached and updated only when date ranges change
+- **Minimal API Calls**: Efficient data fetching with combined filter requests
+- **Smooth Animations**: JavaScript-based animations that don't block user interaction
+
+### 📊 **Filter Capabilities**
+
+| **Filter Type** | **Options Available** | **Interaction Method** |
+|-----------------|----------------------|------------------------|
+| **Status** | All, Completed, Cancelled, Partially Delivered, Pending | Click cards OR dropdown |
+| **Rider** | Dynamic list from database | Searchable dropdown |
+| **Vehicle** | Dynamic list from database | Searchable dropdown |
+| **Date Range** | Existing functionality | Date picker integration |
+| **Aggregation** | Coordinate, Area, City | Existing controls |
+
+### ✅ **Verification Results**
+
+#### **Status Filtering**
+- **✅ All Status Types**: Completed, Cancelled, Partially Delivered, Pending all filter correctly
+- **✅ Visual Feedback**: Active filters clearly indicated with subtle glow effects
+- **✅ Reset Functionality**: "Total Orders" card successfully resets to show all data
+- **✅ Dropdown Sync**: Status dropdown stays in sync with card selections
+
+#### **Advanced Filtering**
+- **✅ Rider Filtering**: Successfully filters by specific rider names
+- **✅ Vehicle Filtering**: Successfully filters by vehicle registrations
+- **✅ Combined Filters**: Multiple filters work together (e.g., completed orders by specific rider)
+- **✅ Clear All**: Single-click reset clears all active filters
+
+#### **Technical Stability**
+- **✅ CSS Conflict Free**: JavaScript-based glow system bypasses all stylesheet conflicts
+- **✅ Real-Time Updates**: All filters apply instantly with proper data refresh
+- **✅ Memory Management**: Animation intervals properly cleaned up to prevent memory leaks
+- **✅ Error Handling**: Graceful degradation when filter options can't be loaded
+
+### 🚀 **Impact & Benefits**
+
+#### **Data Analysis Enhancement**
+- **Multi-Dimensional Filtering**: Analyze delivery patterns by status, rider, vehicle, and location
+- **Performance Insights**: Identify top-performing riders and vehicles across different areas
+- **Status Distribution**: Visual analysis of order completion patterns across geographic regions
+- **Operational Intelligence**: Quick identification of problem areas or high-performing zones
+
+#### **User Workflow Improvement**
+- **One-Click Analysis**: Instant filtering without complex form submissions
+- **Visual Clarity**: Clear indication of active filters and data scope
+- **Flexible Navigation**: Switch between different analysis views seamlessly
+- **Professional Interface**: Polished design that matches enterprise application standards
+
+#### **System Reliability**
+- **Conflict-Free Implementation**: Robust solution that works across different browser environments
+- **Performance Optimized**: Minimal API calls with efficient data processing
+- **Maintainable Code**: Clean separation of concerns between filtering logic and visualization
+- **Future-Proof**: Extensible architecture for additional filter types or status categories
+
+---
+
 ## 🔄 Latest Development: Dashboard Pagination & Date Range Fix (September 2025)
 
 ### 📊 **Issue Addressed**

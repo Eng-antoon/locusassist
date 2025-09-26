@@ -185,6 +185,64 @@
                     </div>
                 </div>
 
+                <!-- Second Row: Filters -->
+                <div class="row g-4 mt-2">
+                    <!-- Status Filters -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-filter me-2"></i>Status Filters
+                            </h6>
+
+                            <div class="mb-3">
+                                <label class="form-label">Filter by Status</label>
+                                <select class="form-select" id="status-filter">
+                                    <option value="">All Orders</option>
+                                    <option value="completed">Completed Orders</option>
+                                    <option value="cancelled">Cancelled Orders</option>
+                                    <option value="partially_delivered">Partially Delivered Orders</option>
+                                    <option value="pending">Pending Orders</option>
+                                </select>
+                                <small class="text-muted">Click on status cards above to filter quickly</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rider Filter -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-user me-2"></i>Rider Filter
+                            </h6>
+
+                            <div class="mb-3">
+                                <label class="form-label">Filter by Rider</label>
+                                <select class="form-select" id="rider-filter" data-bs-toggle="dropdown">
+                                    <option value="">All Riders</option>
+                                </select>
+                                <small class="text-muted">Search and select a specific rider</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Vehicle Filter -->
+                    <div class="col-lg-4">
+                        <div class="filter-section">
+                            <h6 class="filter-section-title">
+                                <i class="fas fa-truck me-2"></i>Vehicle Filter
+                            </h6>
+
+                            <div class="mb-3">
+                                <label class="form-label">Filter by Vehicle</label>
+                                <select class="form-select" id="vehicle-filter">
+                                    <option value="">All Vehicles</option>
+                                </select>
+                                <small class="text-muted">Search and select a specific vehicle</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Control Actions -->
                 <div class="filters-actions mt-3">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -196,6 +254,10 @@
                             <button class="btn btn-outline-secondary" id="reset-view-btn">
                                 <i class="fas fa-home me-1"></i>
                                 Reset View
+                            </button>
+                            <button class="btn btn-outline-warning" id="clear-filters-btn">
+                                <i class="fas fa-eraser me-1"></i>
+                                Clear Filters
                             </button>
                         </div>
 
@@ -217,7 +279,7 @@
 
 
 <!-- Map Container -->
-<div class="row">
+<div class="row" style="    padding-bottom: 5rem;">
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-body p-0">
@@ -371,6 +433,102 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Status card filtering styles - completely override base styles */
+.stat-card.clickable-stat {
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+    border: 2px solid transparent !important;
+}
+
+.stat-card.clickable-stat * {
+    cursor: pointer !important;
+}
+
+.stat-card.clickable-stat:hover:not(.active-filter) {
+    transform: translateY(-4px) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 0 0 2px rgba(59, 130, 246, 0.4) !important;
+    cursor: pointer !important;
+    border: 2px solid rgba(59, 130, 246, 0.4) !important;
+    background: rgba(59, 130, 246, 0.02) !important;
+}
+
+.stat-card.clickable-stat:hover .stat-filter-hint {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Create a completely new glow effect using outline and box-shadow */
+.stat-card-glowing {
+    outline: 3px solid #007bff !important;
+    outline-offset: 2px !important;
+    background: rgba(0, 123, 255, 0.15) !important;
+    position: relative !important;
+    transform: scale(1.02) translateY(-2px) !important;
+    transition: none !important;
+    z-index: 999 !important;
+    animation: pulseGlow 2s ease-in-out infinite alternate !important;
+}
+
+/* Use both outline and multiple box shadows for maximum visibility */
+@keyframes pulseGlow {
+    0% {
+        outline-color: rgba(0, 123, 255, 0.8);
+        box-shadow:
+            0 0 10px rgba(0, 123, 255, 0.6),
+            0 0 20px rgba(0, 123, 255, 0.4),
+            0 0 30px rgba(0, 123, 255, 0.3),
+            inset 0 0 10px rgba(0, 123, 255, 0.1);
+        filter: drop-shadow(0 0 10px rgba(0, 123, 255, 0.5));
+    }
+    100% {
+        outline-color: rgba(0, 123, 255, 1);
+        box-shadow:
+            0 0 15px rgba(0, 123, 255, 0.8),
+            0 0 25px rgba(0, 123, 255, 0.6),
+            0 0 35px rgba(0, 123, 255, 0.4),
+            inset 0 0 15px rgba(0, 123, 255, 0.2);
+        filter: drop-shadow(0 0 15px rgba(0, 123, 255, 0.7));
+    }
+}
+
+.stat-card-glowing .stat-value {
+    color: #007bff !important;
+    font-weight: 700 !important;
+}
+
+.stat-card-glowing .stat-filter-hint {
+    color: #007bff !important;
+    opacity: 1 !important;
+    font-weight: 600 !important;
+}
+
+/* Force override any conflicting styles */
+.stat-card.clickable-stat.stat-card-glowing {
+    border: none !important;
+}
+
+.stat-card.clickable-stat.stat-card-glowing:hover {
+    transform: scale(1.03) translateY(-3px) !important;
+}
+
+.stat-filter-hint {
+    font-size: 0.65rem;
+    color: #6b7280;
+    text-align: center;
+    margin-top: 4px;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+    transform: translateY(-2px);
+    font-weight: 500;
+}
+
+.stat-card.active-filter .stat-filter-hint {
+    color: var(--primary-color);
+    opacity: 1;
+    font-weight: 600;
+}
 </style>
 {% endblock %}
 
@@ -383,7 +541,10 @@ let currentFilters = {
     date_from: '{{ date_from or "" }}', // Date range start
     date_to: '{{ date_to or "" }}', // Date range end
     day_filter: '{{ day_filter or "" }}', // Optional day within range
-    aggregation_level: 'area'
+    aggregation_level: 'area',
+    status_filter: '',
+    rider_filter: '',
+    vehicle_filter: ''
 };
 
 let map = null;
@@ -442,6 +603,7 @@ function initializeControlsPanel() {
     document.getElementById('apply-controls-btn').addEventListener('click', applyControls);
     document.getElementById('reset-view-btn').addEventListener('click', resetMapView);
     document.getElementById('fullscreen-btn').addEventListener('click', toggleFullscreen);
+    document.getElementById('clear-filters-btn').addEventListener('click', clearAllFilters);
 
     // Intensity slider
     const intensitySlider = document.getElementById('intensity-slider');
@@ -454,6 +616,24 @@ function initializeControlsPanel() {
     // Display options
     document.getElementById('show-markers').addEventListener('change', toggleMarkers);
     document.getElementById('show-heatmap').addEventListener('change', toggleHeatmapLayer);
+
+    // Filter event listeners
+    document.getElementById('status-filter').addEventListener('change', function() {
+        console.log('📋 Dropdown status filter changed to:', this.value);
+        currentFilters.status_filter = this.value;
+        loadHeatmapData();
+        // Don't call updateFilterUI here - it will be called after loadHeatmapData completes
+    });
+
+    document.getElementById('rider-filter').addEventListener('change', function() {
+        currentFilters.rider_filter = this.value;
+        loadHeatmapData();
+    });
+
+    document.getElementById('vehicle-filter').addEventListener('change', function() {
+        currentFilters.vehicle_filter = this.value;
+        loadHeatmapData();
+    });
 }
 
 // Initialize Google Maps (called by the API callback)
@@ -521,10 +701,17 @@ function initializeHeatmapDashboard() {
     updateDisplayedDate();
     console.log('✓ Date display updated');
 
+    // Load filter options
+    console.log('📋 Loading filter options...');
+    loadFilterOptions();
+    console.log('✓ Filter options loading initiated');
+
     // Load initial heatmap data
     console.log('📊 Loading initial heatmap data...');
     loadHeatmapData().then(() => {
         console.log('✓ Initial heatmap data loading completed');
+        // Initialize UI state after data is loaded
+        updateFilterUI();
     }).catch((error) => {
         console.error('❌ Failed to load initial heatmap data:', error);
         hideLoading();
@@ -612,6 +799,17 @@ async function loadHeatmapData() {
         }
         params.append('aggregation_level', currentFilters.aggregation_level);
 
+        // Add filter parameters
+        if (currentFilters.status_filter) {
+            params.append('status_filter', currentFilters.status_filter);
+        }
+        if (currentFilters.rider_filter) {
+            params.append('rider_filter', currentFilters.rider_filter);
+        }
+        if (currentFilters.vehicle_filter) {
+            params.append('vehicle_filter', currentFilters.vehicle_filter);
+        }
+
         const apiUrl = `/api/heatmap?${params}`;
         console.log('🌐 API URL:', apiUrl);
         console.log('📤 Making fetch request...');
@@ -687,36 +885,49 @@ function displayHeatmapStats(stats) {
     const statsGrid = document.getElementById('heatmap-stats-grid');
 
     statsGrid.innerHTML = `
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" data-filter="all">
             <div class="stat-icon">
                 <i class="fas fa-box"></i>
             </div>
             <div class="stat-value">${stats.total_orders || 0}</div>
             <div class="stat-label">Total Orders</div>
+            <div class="stat-filter-hint">Click to show all orders</div>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" data-filter="completed">
             <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
                 <i class="fas fa-check-circle"></i>
             </div>
             <div class="stat-value">${stats.completed_orders || 0}</div>
             <div class="stat-label">Completed Orders</div>
+            <div class="stat-filter-hint">Click to filter by completed</div>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" data-filter="cancelled">
             <div class="stat-icon" style="background: rgba(220, 53, 69, 0.1); color: var(--danger-color);">
                 <i class="fas fa-times-circle"></i>
             </div>
             <div class="stat-value">${stats.cancelled_orders || 0}</div>
             <div class="stat-label">Cancelled Orders</div>
+            <div class="stat-filter-hint">Click to filter by cancelled</div>
         </div>
 
-        <div class="stat-card hover-lift">
+        <div class="stat-card hover-lift clickable-stat" data-filter="partially_delivered">
+            <div class="stat-icon" style="background: rgba(255, 165, 0, 0.1); color: #ffa500;">
+                <i class="fas fa-truck-loading"></i>
+            </div>
+            <div class="stat-value">${stats.partially_delivered_orders || 0}</div>
+            <div class="stat-label">Partially Delivered</div>
+            <div class="stat-filter-hint">Click to filter by partially delivered</div>
+        </div>
+
+        <div class="stat-card hover-lift clickable-stat" data-filter="pending">
             <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
                 <i class="fas fa-clock"></i>
             </div>
             <div class="stat-value">${stats.pending_orders || 0}</div>
             <div class="stat-label">Pending Orders</div>
+            <div class="stat-filter-hint">Click to filter by pending</div>
         </div>
 
         <div class="stat-card hover-lift">
@@ -735,6 +946,23 @@ function displayHeatmapStats(stats) {
             <div class="stat-label">Completion Rate</div>
         </div>
     `;
+
+    // Add click event listeners for status filtering
+    document.querySelectorAll('.clickable-stat').forEach(card => {
+        card.addEventListener('click', function() {
+            const filter = this.dataset.filter;
+            applyStatusFilter(filter);
+        });
+    });
+
+    // Apply current filter UI state after cards are created
+    // Use requestAnimationFrame for better timing
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            console.log('🎨 Applying filter UI after cards rendered');
+            updateFilterUI();
+        }, 50);
+    });
 }
 
 function updateMapVisualization() {
@@ -1300,11 +1528,226 @@ function createLocationDetailsContent(data) {
 function applyControls() {
     // Update filters
     currentFilters.aggregation_level = document.getElementById('aggregation-level').value;
+    currentFilters.status_filter = document.getElementById('status-filter').value;
+    currentFilters.rider_filter = document.getElementById('rider-filter').value;
+    currentFilters.vehicle_filter = document.getElementById('vehicle-filter').value;
 
     // Reload heatmap data with new settings
     loadHeatmapData();
 
     showSuccess('Heatmap updated successfully');
+}
+
+function applyStatusFilter(status) {
+    console.log('🎯 Applying status filter:', status);
+
+    // Handle "all" filter case - reset the status filter
+    if (status === 'all') {
+        currentFilters.status_filter = '';
+        document.getElementById('status-filter').value = '';
+        showSuccess('Showing all orders');
+    } else {
+        // Update the status filter dropdown
+        const statusSelect = document.getElementById('status-filter');
+        statusSelect.value = status;
+
+        // Update current filters
+        currentFilters.status_filter = status;
+        showSuccess(`Filtered by ${status} orders`);
+    }
+
+    // Reload heatmap data - UI will be updated after data loads and cards are rendered
+    loadHeatmapData();
+}
+
+function updateFilterUI() {
+    console.log('🎨 Updating filter UI, current status filter:', currentFilters.status_filter);
+
+    // Remove glow effect from all cards using JavaScript
+    document.querySelectorAll('.stat-card').forEach(card => {
+        removeGlowEffect(card);
+        console.log('Removed glow from:', card.dataset.filter);
+    });
+
+    // Add glow effect to the selected filter card
+    if (currentFilters.status_filter) {
+        const activeCard = document.querySelector(`[data-filter="${currentFilters.status_filter}"]`);
+        if (activeCard) {
+            applyGlowEffect(activeCard);
+            console.log('✅ Applied glow to:', currentFilters.status_filter);
+        } else {
+            console.log('❌ Could not find card for filter:', currentFilters.status_filter);
+        }
+    } else {
+        // If no status filter, highlight the "all" card
+        const allCard = document.querySelector('[data-filter="all"]');
+        if (allCard) {
+            applyGlowEffect(allCard);
+            console.log('✅ Applied glow to "all" card');
+        }
+    }
+}
+
+function applyGlowEffect(card) {
+    // Remove any existing classes first
+    card.classList.remove('active-filter', 'stat-card-glowing');
+
+    // Apply subtle glow effect using inline styles (much gentler design)
+    card.style.border = '2px solid #007bff';
+    card.style.background = 'rgba(0, 123, 255, 0.08)';
+    card.style.transform = 'translateY(-1px)';
+    card.style.zIndex = '10';
+    card.style.position = 'relative';
+    card.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.3)';
+
+    // Create very subtle pulsing animation
+    let opacity = 0.3;
+    let increasing = true;
+
+    // Clear any existing interval
+    if (card.glowInterval) {
+        clearInterval(card.glowInterval);
+    }
+
+    // Start gentle pulsing animation (much slower and subtler)
+    card.glowInterval = setInterval(() => {
+        if (increasing) {
+            opacity += 0.02;
+            if (opacity >= 0.5) increasing = false;
+        } else {
+            opacity -= 0.02;
+            if (opacity <= 0.3) increasing = true;
+        }
+
+        // Very subtle shadow pulse
+        card.style.boxShadow = `0 2px 8px rgba(0, 123, 255, ${opacity})`;
+    }, 100); // Slower animation (100ms instead of 50ms)
+
+    // Update text colors (more subtle)
+    const statValue = card.querySelector('.stat-value');
+    const statHint = card.querySelector('.stat-filter-hint');
+
+    if (statValue) {
+        statValue.style.color = '#0056b3';
+        statValue.style.fontWeight = '600';
+    }
+
+    if (statHint) {
+        statHint.style.color = '#0056b3';
+        statHint.style.fontWeight = '500';
+        statHint.style.opacity = '1';
+    }
+
+    console.log('🌟 Subtle glow effect applied');
+}
+
+function removeGlowEffect(card) {
+    // Clear animation interval
+    if (card.glowInterval) {
+        clearInterval(card.glowInterval);
+        delete card.glowInterval;
+    }
+
+    // Remove all inline styles related to glow
+    card.style.border = '';
+    card.style.outline = '';
+    card.style.outlineOffset = '';
+    card.style.background = '';
+    card.style.transform = '';
+    card.style.zIndex = '';
+    card.style.position = '';
+    card.style.boxShadow = '';
+
+    // Reset text colors
+    const statValue = card.querySelector('.stat-value');
+    const statHint = card.querySelector('.stat-filter-hint');
+
+    if (statValue) {
+        statValue.style.color = '';
+        statValue.style.fontWeight = '';
+    }
+
+    if (statHint) {
+        statHint.style.color = '';
+        statHint.style.fontWeight = '';
+        statHint.style.opacity = '';
+    }
+
+    // Remove any lingering classes
+    card.classList.remove('active-filter', 'stat-card-glowing');
+}
+
+async function loadFilterOptions() {
+    try {
+        const params = new URLSearchParams();
+        if (currentFilters.date_from && currentFilters.date_to) {
+            params.append('date_from', currentFilters.date_from);
+            params.append('date_to', currentFilters.date_to);
+            if (currentFilters.day_filter) {
+                params.append('day_filter', currentFilters.day_filter);
+            }
+        } else if (currentFilters.date) {
+            params.append('date', currentFilters.date);
+        }
+
+        const response = await fetch(`/api/heatmap/filter-options?${params}`);
+        const result = await response.json();
+
+        if (result.success) {
+            populateFilterDropdowns(result);
+        } else {
+            console.error('Failed to load filter options:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+function populateFilterDropdowns(options) {
+    // Populate rider dropdown
+    const riderSelect = document.getElementById('rider-filter');
+    riderSelect.innerHTML = '<option value="">All Riders</option>';
+    options.riders.forEach(rider => {
+        const option = document.createElement('option');
+        option.value = rider;
+        option.textContent = rider;
+        riderSelect.appendChild(option);
+    });
+
+    // Populate vehicle dropdown
+    const vehicleSelect = document.getElementById('vehicle-filter');
+    vehicleSelect.innerHTML = '<option value="">All Vehicles</option>';
+    options.vehicles.forEach(vehicle => {
+        const option = document.createElement('option');
+        option.value = vehicle;
+        option.textContent = vehicle;
+        vehicleSelect.appendChild(option);
+    });
+}
+
+function clearAllFilters() {
+    // Reset all filters to default values
+    currentFilters.status_filter = '';
+    currentFilters.rider_filter = '';
+    currentFilters.vehicle_filter = '';
+
+    // Reset all dropdowns
+    document.getElementById('status-filter').value = '';
+    document.getElementById('rider-filter').value = '';
+    document.getElementById('vehicle-filter').value = '';
+
+    // Immediately remove glow from all cards using JavaScript
+    document.querySelectorAll('.stat-card').forEach(card => {
+        removeGlowEffect(card);
+    });
+
+    // Update UI (this will highlight "All Orders" card)
+    updateFilterUI();
+
+    // Reload heatmap data
+    loadHeatmapData();
+
+    showSuccess('All filters cleared - showing all orders');
 }
 
 function resetMapView() {
